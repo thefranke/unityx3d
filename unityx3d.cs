@@ -144,11 +144,11 @@ public class X3DExporter : ScriptableWizard
 		
 		if (transform != null) 
 		{
-			addAttribute(viewpointNode, "position", toString (transform.transform.position));
+			addAttribute(viewpointNode, "position", toString (transform.transform.localPosition));
 						
 			float angle = 0F;
 			Vector3 axis = Vector3.zero;
-			transform.transform.rotation.ToAngleAxis (out angle, out axis);
+			transform.transform.localRotation.ToAngleAxis (out angle, out axis);
 
 			addAttribute(viewpointNode, "orientation", toString (axis) + " " + angle.ToString ());
 		}
@@ -474,11 +474,11 @@ public class X3DExporter : ScriptableWizard
 		XmlNode transformNode;
 		transformNode = xml.CreateElement("Transform");
 
-		addAttribute(transformNode, "translation", toString (transform.transform.position));
+		addAttribute(transformNode, "translation", toString (transform.transform.localPosition));
 
 		float angle = 0F;
 		Vector3 axis = Vector3.zero;
-		transform.transform.rotation.ToAngleAxis(out angle, out axis);
+		transform.transform.localRotation.ToAngleAxis(out angle, out axis);
 		addAttribute(transformNode, "rotation",  toString(axis) + " " + angle.ToString());
 
 		addAttribute(transformNode, "scale", toString (transform.transform.localScale));

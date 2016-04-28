@@ -1,7 +1,8 @@
 /*
- * UnityX3D - http://www.tobias-franke.eu/projects/unityx3d/
+ * UnityX3D
  *
- * Copyright (c) 2015 Tobias Alexander Franke (tobias.franke@siggraph.org)
+ * Copyright (c) 2015 Tobias Alexander Franke
+ * http://www.tobias-franke.eu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +33,7 @@ using System.Collections.Generic;
 
 /*
  * This is a stub main class responsible for importing an X3D document
- */ 
+ */
 class X3DImporter : AssetPostprocessor
 {
 	void OnPostprocessModel(GameObject g)
@@ -42,7 +43,7 @@ class X3DImporter : AssetPostprocessor
 
 /*
  * This is the main class responsible for exporting the selected scene to an X3D document
- */ 
+ */
 public class X3DExporter : ScriptableWizard
 {
 	protected XmlDocument xml;
@@ -52,7 +53,7 @@ public class X3DExporter : ScriptableWizard
 	protected XmlNode X3DNode;
 
 	protected List<string> defNamesInUse;
-	
+
 	public bool useCommonSurfaceShader = true;
 
 	[MenuItem("File/X3D/Export")]
@@ -60,17 +61,17 @@ public class X3DExporter : ScriptableWizard
 	{
 		ScriptableWizard.DisplayWizard("Export selection to X3D", typeof(X3DExporter), "Export");
 	}
-	
+
 	void OnWizardCreate()
 	{
 		// grab the selected objects
 		Transform[] trs = Selection.GetTransforms(SelectionMode.TopLevel);
-	
+
 		// get a path to save the file
 		string file = EditorUtility.SaveFilePanel("Save X3D file as", "${HOME}/Desktop", "", "x3d");
 		outputPath = Path.GetDirectoryName(file);
 
-		if(file.Length == 0) 
+		if(file.Length == 0)
 		{
 			// TODO output error
 			return;
@@ -131,7 +132,7 @@ public class X3DExporter : ScriptableWizard
 		string safeDef = uDef;
 		int i = 1;
 
-		while(defNamesInUse.Contains(safeDef)) 
+		while(defNamesInUse.Contains(safeDef))
 		{
 			safeDef = uDef + "_" + i;
 			i++;
@@ -146,7 +147,7 @@ public class X3DExporter : ScriptableWizard
 	{
 		return(Mathf.PI / 180) * angle;
 	}
-	
+
 	// helper function to add an attribute with a name and value to a node
 	XmlAttribute addAttribute(XmlNode node, string name, string value)
 	{
@@ -161,16 +162,16 @@ public class X3DExporter : ScriptableWizard
 	{
 		XmlNode viewpointNode;
 		viewpointNode = xml.CreateElement("Viewpoint");
-		
+
 		addAttribute(viewpointNode, "DEF", toSafeDEF(camera.name));
-		
+
 		double fov = camera.fieldOfView * Mathf.PI / 180;
 		addAttribute(viewpointNode, "fieldOfView", fov.ToString());
-		
-		if(transform != null) 
+
+		if(transform != null)
 		{
 			addAttribute(viewpointNode, "position", toString(transform.transform.localPosition));
-						
+
 			float angle = 0F;
 			Vector3 axis = Vector3.zero;
 			transform.transform.localRotation.ToAngleAxis(out angle, out axis);
@@ -184,12 +185,12 @@ public class X3DExporter : ScriptableWizard
 	// convert a MeshFilter and accompanying Material with its Materials to X3D
 	XmlNode toX3D(MeshFilter meshFilter, Material material)
 	{
-		if(meshFilter.sharedMesh == null) 
+		if(meshFilter.sharedMesh == null)
 		{
 			Debug.Log("UnityX3D Warning: SharedMesh reference of " + meshFilter.name + " is null.");
 			return xml.CreateElement("Transform");
 		}
-		
+
 		XmlNode shapeNode = toX3D(meshFilter.sharedMesh, material);
 		return shapeNode;
 	}
@@ -197,12 +198,12 @@ public class X3DExporter : ScriptableWizard
 	// convert a MeshFilter and accompanying Material with its Materials to X3D
 	XmlNode toX3D(SkinnedMeshRenderer skinnedMeshRenderer, Material material)
 	{
-		if(skinnedMeshRenderer.sharedMesh == null) 
+		if(skinnedMeshRenderer.sharedMesh == null)
 		{
 			Debug.Log("UnityX3D Warning: SharedMesh reference of " + skinnedMeshRenderer.name + " is null.");
 			return xml.CreateElement("Transform");
 		}
-		
+
 		XmlNode shapeNode = toX3D(skinnedMeshRenderer.sharedMesh, material);
 		return shapeNode;
 	}
@@ -217,7 +218,7 @@ public class X3DExporter : ScriptableWizard
 
 		shapeNode.AppendChild(toX3D(material));
 		shapeNode.AppendChild(toX3D(mesh));
-		
+
 		return shapeNode;
 	}
 
@@ -339,16 +340,16 @@ public class X3DExporter : ScriptableWizard
 		string filename = writeTexture(texture);
 		url.Value = filename;
 
-		if (css) 
+		if (css)
 		{
 			XmlNode surfaceShaderTextureNode = xml.CreateElement ("SurfaceShaderTexture");
 			textureNode = surfaceShaderTextureNode;
 			textureNode.AppendChild(imageTexture2DNode);
-		} 
+		}
 		else
 			textureNode = imageTexture2DNode;
-		
-		if(containerFieldName.Length != 0) 
+
+		if(containerFieldName.Length != 0)
 		{
 			XmlAttribute containerField = xml.CreateAttribute("containerField");
 			containerField.Value = containerFieldName;
@@ -364,7 +365,7 @@ public class X3DExporter : ScriptableWizard
 		XmlNode appearanceNode = xml.CreateElement("Appearance");
 
 		// handle the Standard PBR shader
-		if(material.shader.name == "Standard") 
+		if(material.shader.name == "Standard")
 		{
 			Color color = material.GetColor("_Color");
 			Texture2D albedoMap = material.GetTexture("_MainTex") as Texture2D;
@@ -405,7 +406,7 @@ public class X3DExporter : ScriptableWizard
 					css.AppendChild(toX3D(emissionMap, "emissiveTexture"));
 
 				// TODO: find environment map for glossy reflection
-				/* 
+				/*
 				if(RenderSettings.skybox.name != "Default-Skybox")
 				{
 					// find cubemap texture
@@ -431,7 +432,7 @@ public class X3DExporter : ScriptableWizard
 			else
 			{
 				// write albedo texture
-				if(albedoMap != null) 
+				if(albedoMap != null)
 					appearanceNode.AppendChild(toX3D(albedoMap));
 
 				// write color
@@ -455,7 +456,7 @@ public class X3DExporter : ScriptableWizard
 	XmlNode toX3D(Light light)
 	{
 		XmlNode lightNode;
-		
+
 		switch(light.type)
 		{
 		case LightType.Spot:
@@ -498,7 +499,7 @@ public class X3DExporter : ScriptableWizard
 		addAttribute(navigationInfo, "headlight", "FALSE");
 
 		/*
-		if(RenderSettings.skybox.name != "Default-Skybox") 
+		if(RenderSettings.skybox.name != "Default-Skybox")
 		{
 			// find cubemap texture
 
@@ -516,8 +517,8 @@ public class X3DExporter : ScriptableWizard
 
 			sceneNode.AppendChild(skydomeBackground);
 
-		} 
-		else 
+		}
+		else
 		*/
 		{
 			XmlNode solidBackground = xml.CreateElement("SolidBackground");
@@ -548,7 +549,7 @@ public class X3DExporter : ScriptableWizard
 				toX3D(transform.GetComponent<Camera>())
 			);
 		}
-		
+
 		if(transform.GetComponent<Light>())
 		{
 			transformNode.AppendChild
@@ -557,20 +558,20 @@ public class X3DExporter : ScriptableWizard
 			);
 		}
 
-		if(transform.GetComponent<MeshFilter>()) 
+		if(transform.GetComponent<MeshFilter>())
 		{
 			Material material = null;
 
-			if(transform.GetComponent<Renderer>()) 
+			if(transform.GetComponent<Renderer>())
 				material = transform.GetComponent<Renderer>().sharedMaterial;
-			
+
 			transformNode.AppendChild
 			(
 				toX3D(transform.GetComponent<MeshFilter>(), material)
 			);
-		} 
+		}
 
-		if(transform.GetComponent<SkinnedMeshRenderer>()) 
+		if(transform.GetComponent<SkinnedMeshRenderer>())
 		{
 			Material material = null;
 
@@ -582,7 +583,7 @@ public class X3DExporter : ScriptableWizard
 				toX3D(transform.GetComponent<SkinnedMeshRenderer>(), material)
 			);
 		}
-		
+
 		// recurse through children
 		foreach(Transform child in transform)
 			transformNode.AppendChild(toX3D(child));

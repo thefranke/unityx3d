@@ -41,6 +41,7 @@ namespace UnityX3D
         public static bool bakedLightsAmbient = true;
         public static bool disableHeadlight = false;
         public static bool savePNGlightmaps = false;
+        public static bool lightmapUnlitFaceSets = false;
 
 		static Preferences()
 		{
@@ -57,6 +58,7 @@ namespace UnityX3D
             bakedLightsAmbient = EditorGUILayout.Toggle("Export static lights as ambient", bakedLightsAmbient);
             disableHeadlight = EditorGUILayout.Toggle("Disable X3D headlight", disableHeadlight);
             savePNGlightmaps = EditorGUILayout.Toggle("Save Lightmaps as PNG", savePNGlightmaps);
+            lightmapUnlitFaceSets = EditorGUILayout.Toggle("Unlit Facesets if lightmapped?", lightmapUnlitFaceSets);
 
 			if(GUI.changed)
 				Save();
@@ -68,6 +70,7 @@ namespace UnityX3D
             bakedLightsAmbient = EditorPrefs.GetBool("UnityX3D.bakedLightsAmbient", true);
             disableHeadlight = EditorPrefs.GetBool("UnityX3D.disableHeadlight", false);
             savePNGlightmaps = EditorPrefs.GetBool("UnityX3D.savePNGlightmaps", false);
+            lightmapUnlitFaceSets = EditorPrefs.GetBool("Unlit Facesets if lightmapped?", false);
 
 			loaded = true;
 		}
@@ -78,6 +81,7 @@ namespace UnityX3D
             EditorPrefs.SetBool("UnityX3D.bakedLightsAmbient", bakedLightsAmbient);
             EditorPrefs.SetBool("UnityX3D.disableHeadlight", disableHeadlight);
             EditorPrefs.SetBool("UnityX3D.savePNGlightmaps", savePNGlightmaps);
+            EditorPrefs.SetBool("UnityX3D.lightmapUnlitFaceSets", lightmapUnlitFaceSets);
 		}
 	}
 	
@@ -246,6 +250,9 @@ namespace UnityX3D
 			{
 				geometryNode = CreateNode("IndexedFaceSet");
 
+                if (hasLightmap && Preferences.lightmapUnlitFaceSets)
+                    AddXmlAttribute(geometryNode, "lit", "FALSE");
+
 				// process indices
 				XmlAttribute coordIndex = xml.CreateAttribute("coordIndex");
 				geometryNode.Attributes.Append(coordIndex);
@@ -333,7 +340,7 @@ namespace UnityX3D
                 }
 
 				// process UV coordinates
-				if(mesh.uv.Length > 0)
+                if(mesh.uv.Length > 0 && lightmapUVs != mesh.uv)
 				{
 					XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
 					XmlAttribute point = xml.CreateAttribute("point");
@@ -425,9 +432,8 @@ namespace UnityX3D
 
             if (Preferences.savePNGlightmaps)
                 ext = ".png";
-                
-            
-            string path = Application.dataPath + "/" + renderer.gameObject.scene.name + "/Lightmap-0_comp_light" + ext;
+
+            string path = Application.dataPath + "/" + renderer.gameObject.scene.name + "/Lightmap-" + renderer.lightmapIndex + "_comp_light" + ext;
             string file = renderer.gameObject.scene.name + "_" + Path.GetFileName(path);
 
             // TODO maybe prompt for each overwrite?
@@ -580,7 +586,6 @@ namespace UnityX3D
 				{
 					// write color
 					XmlNode materialNode = CreateNode("Material");
-
 					AddXmlAttribute(materialNode, "diffuseColor", ToString(color *(1 - metalness)));
 					AddXmlAttribute(materialNode, "specularColor", ToString(Vector3.one * metalness));
 					AddXmlAttribute(materialNode, "shininess", (smoothness*smoothness).ToString());
@@ -588,7 +593,8 @@ namespace UnityX3D
 					AddXmlAttribute(materialNode, "ambientIntensity", RenderSettings.ambientIntensity.ToString());
 
                     XmlNode multiTextureNode = CreateNode("MultiTexture");
-                    AddXmlAttribute(multiTextureNode, "mode", "ADD ADD");
+                    AddXmlAttribute(multiTextureNode, "mode", "ADDSIGNED");
+                    AddXmlAttribute(multiTextureNode, "source", "DIFFUSE");
 
                     XmlNode multiTextureTransformNode = CreateNode("MultiTextureTransform");
                     multiTextureTransformNode.AppendChild(textureTransform);
@@ -672,8 +678,9 @@ namespace UnityX3D
 
         static void ExportRenderSettings()
 		{
-			XmlNode navigationInfo = CreateNode("NavigationInfo");
-			AddXmlAttribute(navigationInfo, "headlight", "FALSE");
+			XmlNode navigationInfoNode = CreateNode("NavigationInfo");
+            AddXmlAttribute(navigationInfoNode, "headlight", Preferences.disableHeadlight ? "FALSE" : "TRUE");
+            sceneNode.AppendChild(navigationInfoNode);
 
 			/*
 			if(RenderSettings.skybox.name != "Default-Skybox")
@@ -799,13 +806,13 @@ namespace UnityX3D
             sceneNode = CreateNode("Scene");
             X3DNode.AppendChild(sceneNode);
 
+            ExportRenderSettings();
+
             XmlNode lhToRh = CreateNode("Transform");
             AddXmlAttribute(lhToRh, "scale", "1 1 -1");
             sceneNode.AppendChild(lhToRh);
             
 			sceneNode = lhToRh;
-
-            ExportRenderSettings();
 
             foreach(Transform tr in trs)
                 sceneNode.AppendChild(TransformToX3D(tr));

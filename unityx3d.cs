@@ -42,6 +42,7 @@ namespace UnityX3D
         public static bool disableHeadlight = false;
         public static bool savePNGlightmaps = false;
         public static bool lightmapUnlitFaceSets = false;
+        public static bool saveIndividualShapes = false;
 
 		static Preferences()
 		{
@@ -58,7 +59,7 @@ namespace UnityX3D
             bakedLightsAmbient = EditorGUILayout.Toggle("Export static lights as ambient", bakedLightsAmbient);
             disableHeadlight = EditorGUILayout.Toggle("Disable X3D headlight", disableHeadlight);
             savePNGlightmaps = EditorGUILayout.Toggle("Save Lightmaps as PNG", savePNGlightmaps);
-            lightmapUnlitFaceSets = EditorGUILayout.Toggle("Unlit Facesets if lightmapped?", lightmapUnlitFaceSets);
+            lightmapUnlitFaceSets = EditorGUILayout.Toggle("Set Facesets unlit if lightmapped", lightmapUnlitFaceSets);
 
 			if(GUI.changed)
 				Save();
@@ -107,6 +108,9 @@ namespace UnityX3D
         static protected XmlNode X3DNode;
 
         static protected List<string> defNamesInUse;
+
+        static protected int currentNodeIndex;
+        static protected int numNodesToExport;
 
         // Clear the console
         static void ClearConsole () 
@@ -202,7 +206,7 @@ namespace UnityX3D
 		{
 			if(mesh == null)
 			{
-				Debug.Log("UnityX3D Warning: SharedMesh reference of " + name + " is null.");
+				Debug.LogWarning("UnityX3D Warning: SharedMesh reference of " + name + " is null.");
 				return null;
 			}
 
@@ -433,8 +437,16 @@ namespace UnityX3D
             if (Preferences.savePNGlightmaps)
                 ext = ".png";
 
-            string path = Application.dataPath + "/" + renderer.gameObject.scene.name + "/Lightmap-" + renderer.lightmapIndex + "_comp_light" + ext;
-            string file = renderer.gameObject.scene.name + "_" + Path.GetFileName(path);
+            int dotIndex = renderer.gameObject.scene.path.LastIndexOf(".");
+            string scenePath = renderer.gameObject.scene.path.Remove(dotIndex);
+
+            int slashIndex = Application.dataPath.LastIndexOf("/");
+            string dataPath = Application.dataPath.Remove(slashIndex);
+
+            string lightmapFileName = "Lightmap-" + renderer.lightmapIndex + "_comp_light" + ext;
+
+            string path = dataPath + "/" + scenePath + "/" + lightmapFileName;
+            string file = renderer.gameObject.scene.name + "_" + lightmapFileName;
 
             // TODO maybe prompt for each overwrite?
             if (Preferences.savePNGlightmaps)
@@ -509,57 +521,63 @@ namespace UnityX3D
         static XmlNode RendererToX3D(Renderer renderer)
 		{
 			Material material = renderer.sharedMaterial;
+
+            if (material == null)
+                throw new System.Exception("Material is null");
+
+            if (material.shader == null)
+                throw new System.Exception("Material is null");
 			
 			XmlNode appearanceNode = CreateNode("Appearance");
 
 			// handle the Standard PBR shader
-			if(material.shader.name == "Standard")
-			{
-				Color color = material.GetColor("_Color");
-				Texture2D albedoMap = material.GetTexture("_MainTex") as Texture2D;
-				Texture2D metallicGlossMap = material.GetTexture("_MetallicGlossMap") as Texture2D;
-				float smoothness = material.GetFloat("_Glossiness");
-				float metalness = material.GetFloat("_Metallic");
-				Texture2D normalMap = material.GetTexture("_BumpMap") as Texture2D;
-				Color emissionColor = material.GetColor("_EmissionColor");
-				Texture2D emissionMap = material.GetTexture("_EmissionMap") as Texture2D;
-				Vector4 uvTiling = material.GetVector("_MainTex_ST");
+            if (material.shader.name == "Standard")
+            {
+                Color color = material.GetColor("_Color");
+                Texture2D albedoMap = material.GetTexture("_MainTex") as Texture2D;
+                Texture2D metallicGlossMap = material.GetTexture("_MetallicGlossMap") as Texture2D;
+                float smoothness = material.GetFloat("_Glossiness");
+                float metalness = material.GetFloat("_Metallic");
+                Texture2D normalMap = material.GetTexture("_BumpMap") as Texture2D;
+                Color emissionColor = material.GetColor("_EmissionColor");
+                Texture2D emissionMap = material.GetTexture("_EmissionMap") as Texture2D;
+                Vector4 uvTiling = material.GetVector("_MainTex_ST");
 				
-				// if the Renderer has a lightmap
+                // if the Renderer has a lightmap
                 bool hasLightmap = renderer.lightmapIndex != -1;
 
-				XmlNode textureTransform = CreateNode("TextureTransform");
-				AddXmlAttribute(textureTransform, "scale", uvTiling.x + " " + uvTiling.y);
+                XmlNode textureTransform = CreateNode("TextureTransform");
+                AddXmlAttribute(textureTransform, "scale", uvTiling.x + " " + uvTiling.y);
 
-				if(Preferences.useCommonSurfaceShader)
-				{
-					XmlNode css = CreateNode("CommonSurfaceShader");
+                if (Preferences.useCommonSurfaceShader)
+                {
+                    XmlNode css = CreateNode("CommonSurfaceShader");
 
-					// TODO add texture IDs
-                    if(hasLightmap)
-					{
-						XmlNode ambientTextureNode = LightmapToX3D(renderer, "ambientTexture", true);
-						css.AppendChild(ambientTextureNode);
-					}
+                    // TODO add texture IDs
+                    if (hasLightmap)
+                    {
+                        XmlNode ambientTextureNode = LightmapToX3D(renderer, "ambientTexture", true);
+                        css.AppendChild(ambientTextureNode);
+                    }
 
-					if(albedoMap != null)
-					{
-						XmlNode diffuseTextureNode = TextureToX3D(albedoMap, "diffuseTexture", true);
-						diffuseTextureNode.AppendChild(textureTransform);
-						css.AppendChild(diffuseTextureNode);
-					}
+                    if (albedoMap != null)
+                    {
+                        XmlNode diffuseTextureNode = TextureToX3D(albedoMap, "diffuseTexture", true);
+                        diffuseTextureNode.AppendChild(textureTransform);
+                        css.AppendChild(diffuseTextureNode);
+                    }
 
-					if(normalMap != null)
+                    if (normalMap != null)
                         css.AppendChild(TextureToX3D(normalMap, "normalTexture", true));
 
-					if(metallicGlossMap != null)
+                    if (metallicGlossMap != null)
                         css.AppendChild(TextureToX3D(metallicGlossMap, "specularTexture", true));
 
-					if(emissionMap != null)
+                    if (emissionMap != null)
                         css.AppendChild(TextureToX3D(emissionMap, "emissiveTexture", true));
 
-					// TODO: find environment map for glossy reflection
-					/*
+                    // TODO: find environment map for glossy reflection
+                    /*
 					if(RenderSettings.skybox.name != "Default-Skybox")
 					{
 						// find cubemap texture
@@ -574,23 +592,23 @@ namespace UnityX3D
 					*/
 
                     AddXmlAttribute(css, "ambientFactor", ToString(new Vector3(1, 1, 1)));
-					AddXmlAttribute(css, "specularFactor", ToString(new Vector3(1, 1, 1) * metalness));
-					AddXmlAttribute(css, "diffuseFactor", ToString(color *(1 - metalness)));
-					AddXmlAttribute(css, "shininessFactor", (smoothness*smoothness).ToString());
-					AddXmlAttribute(css, "emissiveFactor", ToString(emissionColor));
+                    AddXmlAttribute(css, "specularFactor", ToString(new Vector3(1, 1, 1) * metalness));
+                    AddXmlAttribute(css, "diffuseFactor", ToString(color * (1 - metalness)));
+                    AddXmlAttribute(css, "shininessFactor", (smoothness * smoothness).ToString());
+                    AddXmlAttribute(css, "emissiveFactor", ToString(emissionColor));
                     //AddXmlAttribute(css, "reflectionFactor", ToString(new Vector3(1, 1, 1) * metalness));
 
-					appearanceNode.AppendChild(css);
-				}
-				else
-				{
-					// write color
-					XmlNode materialNode = CreateNode("Material");
-					AddXmlAttribute(materialNode, "diffuseColor", ToString(color *(1 - metalness)));
-					AddXmlAttribute(materialNode, "specularColor", ToString(Vector3.one * metalness));
-					AddXmlAttribute(materialNode, "shininess", (smoothness*smoothness).ToString());
-					AddXmlAttribute(materialNode, "emissiveColor", ToString(emissionColor));
-					AddXmlAttribute(materialNode, "ambientIntensity", RenderSettings.ambientIntensity.ToString());
+                    appearanceNode.AppendChild(css);
+                }
+                else
+                {
+                    // write color
+                    XmlNode materialNode = CreateNode("Material");
+                    AddXmlAttribute(materialNode, "diffuseColor", ToString(color * (1 - metalness)));
+                    AddXmlAttribute(materialNode, "specularColor", ToString(Vector3.one * metalness));
+                    AddXmlAttribute(materialNode, "shininess", (smoothness * smoothness).ToString());
+                    AddXmlAttribute(materialNode, "emissiveColor", ToString(emissionColor));
+                    AddXmlAttribute(materialNode, "ambientIntensity", RenderSettings.ambientIntensity.ToString());
 
                     XmlNode multiTextureNode = CreateNode("MultiTexture");
                     AddXmlAttribute(multiTextureNode, "mode", "ADDSIGNED");
@@ -600,7 +618,7 @@ namespace UnityX3D
                     multiTextureTransformNode.AppendChild(textureTransform);
 
                     // Write lightmap
-                    if(hasLightmap)
+                    if (hasLightmap)
                     {
                         multiTextureNode.AppendChild(LightmapToX3D(renderer));
 
@@ -620,9 +638,11 @@ namespace UnityX3D
                     appearanceNode.AppendChild(multiTextureNode);
                     appearanceNode.AppendChild(multiTextureTransformNode);
 
-					appearanceNode.AppendChild(materialNode);
-				}
-			}
+                    appearanceNode.AppendChild(materialNode);
+                }
+            }
+            else
+                Debug.LogWarning(renderer.name + " has no Standard material");
 
 			return appearanceNode;
 		}
@@ -713,6 +733,9 @@ namespace UnityX3D
 
         static XmlNode TransformToX3D(Transform transform)
 		{
+            EditorUtility.DisplayProgressBar("UnityX3D", "Exporting scene...", (float)currentNodeIndex/numNodesToExport);
+            currentNodeIndex++;
+            
 			XmlNode transformNode;
 			transformNode = CreateNode("Transform");
 
@@ -772,52 +795,79 @@ namespace UnityX3D
 			return transformNode;
 		}
 
+        static int CountNodes(Transform tr)
+        {
+            int count = 0;
+
+            // Count nodes to display progress
+            foreach (Transform c in tr)
+                count += CountNodes(c);
+
+            return count + tr.childCount;
+        }
+
         [MenuItem("File/Export X3D")]
         static void ExportX3D()
         {
             ClearConsole();
 
-            // grab the selected objects
-            Transform[] trs = Selection.GetTransforms(SelectionMode.TopLevel);
-
-            // get a path to save the file
-            string file = EditorUtility.SaveFilePanel("Save X3D file as", "${HOME}/Desktop", "", "x3d");
-            outputPath = Path.GetDirectoryName(file);
-
-            if(file.Length == 0)
+            try
             {
-                // TODO output error
-                return;
+                // grab the selected objects
+                Transform[] trs = Selection.GetTransforms(SelectionMode.TopLevel);
+
+                // get a path to save the file
+                string file = EditorUtility.SaveFilePanel("Save X3D file as", "${HOME}/Desktop", "", "x3d");
+                outputPath = Path.GetDirectoryName(file);
+
+                if(file.Length == 0)
+                {
+                    // TODO output error
+                    return;
+                }
+
+                xml = new XmlDocument();
+
+                defNamesInUse = new List<string>();
+
+                XmlNode xmlHeader = xml.CreateXmlDeclaration("1.0", "UTF-8", null);
+                xml.AppendChild(xmlHeader);
+
+                XmlDocumentType docType = xml.CreateDocumentType("X3D", "http://www.web3d.org/specifications/x3d-3.3.dtd", null, null);
+                xml.AppendChild(docType);
+
+                X3DNode = CreateNode("X3D");
+                xml.AppendChild(X3DNode);
+
+                sceneNode = CreateNode("Scene");
+                X3DNode.AppendChild(sceneNode);
+
+                ExportRenderSettings();
+
+                XmlNode lhToRh = CreateNode("Transform");
+                AddXmlAttribute(lhToRh, "scale", "1 1 -1");
+                sceneNode.AppendChild(lhToRh);
+                
+    			sceneNode = lhToRh;
+
+                currentNodeIndex = 0;
+                numNodesToExport = 0;
+
+                // Count number of nodes for progress bar
+                foreach(Transform tr in trs)
+                    numNodesToExport += CountNodes(tr);
+                
+                foreach(Transform tr in trs)
+                    sceneNode.AppendChild(TransformToX3D(tr));
+
+                xml.Save(file);
+            }
+            catch(System.Exception e)
+            {
+                Debug.LogError(e.ToString());
             }
 
-            xml = new XmlDocument();
-
-            defNamesInUse = new List<string>();
-
-            XmlNode xmlHeader = xml.CreateXmlDeclaration("1.0", "UTF-8", null);
-            xml.AppendChild(xmlHeader);
-
-            XmlDocumentType docType = xml.CreateDocumentType("X3D", "http://www.web3d.org/specifications/x3d-3.3.dtd", null, null);
-            xml.AppendChild(docType);
-
-            X3DNode = CreateNode("X3D");
-            xml.AppendChild(X3DNode);
-
-            sceneNode = CreateNode("Scene");
-            X3DNode.AppendChild(sceneNode);
-
-            ExportRenderSettings();
-
-            XmlNode lhToRh = CreateNode("Transform");
-            AddXmlAttribute(lhToRh, "scale", "1 1 -1");
-            sceneNode.AppendChild(lhToRh);
-            
-			sceneNode = lhToRh;
-
-            foreach(Transform tr in trs)
-                sceneNode.AppendChild(TransformToX3D(tr));
-
-            xml.Save(file);
+            EditorUtility.ClearProgressBar();
         }
 	}
 }

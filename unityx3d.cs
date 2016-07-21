@@ -43,6 +43,7 @@ namespace UnityX3D
         public static bool savePNGlightmaps = false;
         public static bool lightmapUnlitFaceSets = false;
         public static bool saveIndividualShapes = false;
+        public static bool exportLightmaps = true;
 
 		static Preferences()
 		{
@@ -58,6 +59,7 @@ namespace UnityX3D
             useCommonSurfaceShader = EditorGUILayout.Toggle("Use CommonSurfaceShader", useCommonSurfaceShader);
             bakedLightsAmbient = EditorGUILayout.Toggle("Export static lights as ambient", bakedLightsAmbient);
             disableHeadlight = EditorGUILayout.Toggle("Disable X3D headlight", disableHeadlight);
+            exportLightmaps = EditorGUILayout.Toggle("Export Lightmaps", exportLightmaps);
             savePNGlightmaps = EditorGUILayout.Toggle("Save Lightmaps as PNG", savePNGlightmaps);
             lightmapUnlitFaceSets = EditorGUILayout.Toggle("Set Facesets unlit if lightmapped", lightmapUnlitFaceSets);
 
@@ -70,6 +72,7 @@ namespace UnityX3D
             useCommonSurfaceShader = EditorPrefs.GetBool("UnityX3D.useCommonSurfaceShader", true);
             bakedLightsAmbient = EditorPrefs.GetBool("UnityX3D.bakedLightsAmbient", true);
             disableHeadlight = EditorPrefs.GetBool("UnityX3D.disableHeadlight", false);
+            exportLightmaps = EditorPrefs.GetBool("UnityX3D.exportLightmaps", true);
             savePNGlightmaps = EditorPrefs.GetBool("UnityX3D.savePNGlightmaps", false);
             lightmapUnlitFaceSets = EditorPrefs.GetBool("Unlit Facesets if lightmapped?", false);
 
@@ -81,6 +84,7 @@ namespace UnityX3D
             EditorPrefs.SetBool("UnityX3D.useCommonSurfaceShader", useCommonSurfaceShader);
             EditorPrefs.SetBool("UnityX3D.bakedLightsAmbient", bakedLightsAmbient);
             EditorPrefs.SetBool("UnityX3D.disableHeadlight", disableHeadlight);
+            EditorPrefs.SetBool("UnityX3D.exportLightmaps", exportLightmaps);
             EditorPrefs.SetBool("UnityX3D.savePNGlightmaps", savePNGlightmaps);
             EditorPrefs.SetBool("UnityX3D.lightmapUnlitFaceSets", lightmapUnlitFaceSets);
 		}
@@ -317,7 +321,7 @@ namespace UnityX3D
                     lightmapUVs = mesh.uv;
                 }
 
-                if (lightmapUVs.Length > 0)
+                if (lightmapUVs.Length > 0 && Preferences.exportLightmaps)
                 {
                     XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
                     XmlAttribute point = xml.CreateAttribute("point");
@@ -521,14 +525,13 @@ namespace UnityX3D
         static XmlNode RendererToX3D(Renderer renderer)
 		{
 			Material material = renderer.sharedMaterial;
+            XmlNode appearanceNode = CreateNode("Appearance");
 
-            if (material == null)
-                throw new System.Exception("Material is null");
-
-            if (material.shader == null)
-                throw new System.Exception("Material is null");
-			
-			XmlNode appearanceNode = CreateNode("Appearance");
+            if (material == null || material.shader == null)
+            {
+                Debug.LogWarning("Material/Shader is null");
+                return appearanceNode;
+            }
 
 			// handle the Standard PBR shader
             if (material.shader.name == "Standard")
@@ -554,7 +557,7 @@ namespace UnityX3D
                     XmlNode css = CreateNode("CommonSurfaceShader");
 
                     // TODO add texture IDs
-                    if (hasLightmap)
+                    if (hasLightmap && Preferences.exportLightmaps)
                     {
                         XmlNode ambientTextureNode = LightmapToX3D(renderer, "ambientTexture", true);
                         css.AppendChild(ambientTextureNode);
@@ -618,7 +621,7 @@ namespace UnityX3D
                     multiTextureTransformNode.AppendChild(textureTransform);
 
                     // Write lightmap
-                    if (hasLightmap)
+                    if (hasLightmap && Preferences.exportLightmaps)
                     {
                         multiTextureNode.AppendChild(LightmapToX3D(renderer));
 

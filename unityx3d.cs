@@ -28,14 +28,16 @@ using UnityEditor;
 
 using System.IO;
 using System.Xml;
+using System.Linq;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace UnityX3D
 {
-	[InitializeOnLoad]
-	public class Preferences
-	{
-		protected static bool loaded = false;
+    [InitializeOnLoad]
+    public class Preferences
+    {
+        protected static bool loaded = false;
 
         public static bool useCommonSurfaceShader = true;
         public static bool bakedLightsAmbient = true;
@@ -45,16 +47,16 @@ namespace UnityX3D
         public static bool saveIndividualShapes = false;
         public static bool exportLightmaps = true;
 
-		static Preferences()
-		{
-			Load();
-		}
+        static Preferences()
+        {
+            Load();
+        }
 
-		[PreferenceItem("UnityX3D")]
-		static void PreferenceGUI()
-		{
-			if(!loaded)
-				Load();
+        [PreferenceItem("UnityX3D")]
+        static void PreferenceGUI()
+        {
+            if(!loaded)
+                Load();
 
             useCommonSurfaceShader = EditorGUILayout.Toggle("Use CommonSurfaceShader", useCommonSurfaceShader);
             bakedLightsAmbient = EditorGUILayout.Toggle("Export static lights as ambient", bakedLightsAmbient);
@@ -63,12 +65,12 @@ namespace UnityX3D
             savePNGlightmaps = EditorGUILayout.Toggle("Save Lightmaps as PNG", savePNGlightmaps);
             lightmapUnlitFaceSets = EditorGUILayout.Toggle("Set Facesets unlit if lightmapped", lightmapUnlitFaceSets);
 
-			if(GUI.changed)
-				Save();
-		}
+            if(GUI.changed)
+                Save();
+        }
 
-		static void Load()
-		{
+        static void Load()
+        {
             useCommonSurfaceShader = EditorPrefs.GetBool("UnityX3D.useCommonSurfaceShader", true);
             bakedLightsAmbient = EditorPrefs.GetBool("UnityX3D.bakedLightsAmbient", true);
             disableHeadlight = EditorPrefs.GetBool("UnityX3D.disableHeadlight", false);
@@ -76,36 +78,144 @@ namespace UnityX3D
             savePNGlightmaps = EditorPrefs.GetBool("UnityX3D.savePNGlightmaps", false);
             lightmapUnlitFaceSets = EditorPrefs.GetBool("Unlit Facesets if lightmapped?", false);
 
-			loaded = true;
-		}
+            loaded = true;
+        }
 
-		static void Save()
-		{
+        static void Save()
+        {
             EditorPrefs.SetBool("UnityX3D.useCommonSurfaceShader", useCommonSurfaceShader);
             EditorPrefs.SetBool("UnityX3D.bakedLightsAmbient", bakedLightsAmbient);
             EditorPrefs.SetBool("UnityX3D.disableHeadlight", disableHeadlight);
             EditorPrefs.SetBool("UnityX3D.exportLightmaps", exportLightmaps);
             EditorPrefs.SetBool("UnityX3D.savePNGlightmaps", savePNGlightmaps);
             EditorPrefs.SetBool("UnityX3D.lightmapUnlitFaceSets", lightmapUnlitFaceSets);
-		}
-	}
-	
-	/*
-	 * This is a stub main class responsible for importing an X3D document
-	 */
-	class X3DImporter : AssetPostprocessor
-	{
-		void OnPostprocessModel(GameObject g)
-		{
-		}
-	}
+        }
+    }
 
-	/*
-	 * This is the main class responsible for exporting the selected scene to an X3D document
-	 */
-	public class X3DExporter : MonoBehaviour
-	{
-		static protected XmlDocument xml;
+    class Tools
+    {
+        // Clear the console
+        public static void ClearConsole()
+        {
+            Debug.ClearDeveloperConsole();
+        }
+
+        // helper to convert a Vector2 to a string
+        public static string ToString(Vector2 v)
+        {
+            return v.x + " " + v.y;
+        }
+
+        // helper to convert a Vector3 to a string
+        public static string ToString(Vector3 v)
+        {
+            return v.x + " " + v.y + " " + v.z;
+        }
+
+        // helper to convert a Color to a string
+        public static string ToString(Color c)
+        {
+            return c.r + " " + c.g + " " + c.b;
+        }
+
+        public static double ToRadians(double angle)
+        {
+            return (Mathf.PI / 180) * angle;
+        }
+    }
+    
+    /*
+     * This is the main class responsible for importing an X3D document
+     */
+    class X3DImporter : AssetPostprocessor
+    {
+        public static string GetName(XmlNode node)
+        {
+            if (node.Attributes != null)
+            {
+                var name = node.Attributes["DEF"];
+                if (name != null)
+                    return name.Value;
+            }
+
+            if (node.Name != null)
+                return node.Name;
+            else
+                return "Unnamed";
+        }
+
+        static void ReadShape()
+        {
+
+        }
+
+        static void ReadInline()
+        {
+
+        }
+
+        static void ReadTransform(XmlNode transformNode, GameObject obj)
+        {
+        }
+
+        static void ReadChildren(XmlNode node, GameObject parent)
+        {
+            foreach (XmlNode childNode in node)
+            {
+                if (childNode.Name == "#comment")
+                    continue;
+
+                GameObject obj = new GameObject(GetName(childNode));
+
+                // Setup parent node
+                if (parent != null)
+                    obj.transform.parent = parent.transform;
+
+                if (childNode.Name == "Transform")
+                    ReadTransform(childNode, obj);
+
+                ReadChildren(childNode, obj);
+            }
+        }
+
+        static void ReadX3D(string path)
+        {
+            Tools.ClearConsole();
+
+            try
+            {
+                XmlDocument xml = new XmlDocument();
+                xml.Load(path);
+
+                // Get to Scene node
+                XmlNode x3dNode = xml.SelectSingleNode("X3D");
+                XmlNode sceneNode = x3dNode.SelectSingleNode("Scene");
+
+                ReadChildren(sceneNode, null);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError(e.ToString());
+            }
+
+            EditorUtility.ClearProgressBar();
+        }
+
+        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        {
+            foreach (string path in importedAssets.Where(x => x.EndsWith(".x3d")))
+            {
+                ReadX3D(path);
+            }
+        }
+    }
+
+    /*
+     * This is the main class responsible for exporting the selected scene to an X3D document
+     */
+    public class X3DExporter : MonoBehaviour
+    {
+        static protected XmlDocument xml;
         static protected string outputPath;
 
         static protected XmlNode sceneNode;
@@ -115,203 +225,172 @@ namespace UnityX3D
 
         static protected int currentNodeIndex;
         static protected int numNodesToExport;
-
-        // Clear the console
-        static void ClearConsole () 
-        {
-            var logEntries = System.Type.GetType("UnityEditorInternal.LogEntries,UnityEditor.dll");
-            var clearMethod = logEntries.GetMethod("Clear", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
-            clearMethod.Invoke(null,null);
-        }
-
-		// helper to convert a Vector2 to a string
-		static string ToString(Vector2 v)
-		{
-			return v.x + " " + v.y;
-		}
-
-		// helper to convert a Vector3 to a string
-		static string ToString(Vector3 v)
-		{
-			return v.x + " " + v.y + " " + v.z;
-		}
-
-		// helper to convert a Color to a string
-		static string ToString(Color c)
-		{
-			return c.r + " " + c.g + " " + c.b;
-		}
-
-		// create a safe-to-use ID
+        
+        // create a safe-to-use ID
         static string ToSafeDEF(string def)
-		{
-			string uDef = def.Replace(" ", "_");
+        {
+            string uDef = def.Replace(" ", "_");
 
-			string safeDef = uDef;
-			int i = 1;
+            string safeDef = uDef;
+            int i = 1;
 
-			while(defNamesInUse.Contains(safeDef))
-			{
-				safeDef = uDef + "_" + i;
-				i++;
-			}
+            while(defNamesInUse.Contains(safeDef))
+            {
+                safeDef = uDef + "_" + i;
+                i++;
+            }
 
-			defNamesInUse.Add(safeDef);
+            defNamesInUse.Add(safeDef);
 
-			return safeDef;
-		}
-
-		static double ToRadians(double angle)
-		{
-			return(Mathf.PI / 180) * angle;
-		}
-
-		// helper function to add an attribute with a name and value to a node
-		static XmlAttribute AddXmlAttribute(XmlNode node, string name, string value)
-		{
-			XmlAttribute attr = xml.CreateAttribute(name);
-			attr.Value = value;
-			node.Attributes.Append(attr);
-			return attr;
-		}
+            return safeDef;
+        }
+        
+        // helper function to add an attribute with a name and value to a node
+        static XmlAttribute AddXmlAttribute(XmlNode node, string name, string value)
+        {
+            XmlAttribute attr = xml.CreateAttribute(name);
+            attr.Value = value;
+            node.Attributes.Append(attr);
+            return attr;
+        }
 
         static XmlNode CreateNode(string name)
         {
             return xml.CreateElement(name);
         }
 
-		// convert a Unity Camera to X3D
+        // convert a Unity Camera to X3D
         static XmlNode CameraToX3D(Camera camera, Transform transform = null)
-		{
-			XmlNode viewpointNode;
-			viewpointNode = CreateNode("Viewpoint");
+        {
+            XmlNode viewpointNode;
+            viewpointNode = CreateNode("Viewpoint");
 
-			AddXmlAttribute(viewpointNode, "DEF", ToSafeDEF(camera.name));
+            AddXmlAttribute(viewpointNode, "DEF", ToSafeDEF(camera.name));
 
-			double fov = camera.fieldOfView * Mathf.PI / 180;
-			AddXmlAttribute(viewpointNode, "fieldOfView", fov.ToString());
+            double fov = camera.fieldOfView * Mathf.PI / 180;
+            AddXmlAttribute(viewpointNode, "fieldOfView", fov.ToString());
 
-			if(transform != null)
-			{
-				AddXmlAttribute(viewpointNode, "position", ToString(transform.transform.localPosition));
+            if(transform != null)
+            {
+                AddXmlAttribute(viewpointNode, "position", Tools.ToString(transform.transform.localPosition));
 
-				float angle = 0F;
-				Vector3 axis = Vector3.zero;
-				transform.transform.localRotation.ToAngleAxis(out angle, out axis);
+                float angle = 0F;
+                Vector3 axis = Vector3.zero;
+                transform.transform.localRotation.ToAngleAxis(out angle, out axis);
 
-				AddXmlAttribute(viewpointNode, "orientation", ToString(axis) + " " + ToRadians(angle).ToString());
-			}
+                AddXmlAttribute(viewpointNode, "orientation", Tools.ToString(axis) + " " + Tools.ToRadians(angle).ToString());
+            }
 
-			return viewpointNode;
-		}
+            return viewpointNode;
+        }
 
-		// convert a Mesh and accompanying Renderer to X3D
+        // convert a Mesh and accompanying Renderer to X3D
         static XmlNode ObjectToX3D(string name, Mesh mesh, Renderer renderer)
-		{
-			if(mesh == null)
-			{
-				Debug.LogWarning("UnityX3D Warning: SharedMesh reference of " + name + " is null.");
-				return null;
-			}
+        {
+            if(mesh == null)
+            {
+                Debug.LogWarning("UnityX3D Warning: SharedMesh reference of " + name + " is null.");
+                return null;
+            }
 
-			XmlNode shapeNode = ObjectToX3D(mesh, renderer);
-			return shapeNode;
-		}
+            XmlNode shapeNode = ObjectToX3D(mesh, renderer);
+            return shapeNode;
+        }
 
-		// convert a Mesh and accompanying Renderer with its Materials to X3D
+        // convert a Mesh and accompanying Renderer with its Materials to X3D
         static XmlNode ObjectToX3D(Mesh mesh, Renderer renderer)
-		{
-			XmlNode shapeNode;
-			shapeNode = CreateNode("Shape");
+        {
+            XmlNode shapeNode;
+            shapeNode = CreateNode("Shape");
 
-			AddXmlAttribute(shapeNode, "DEF", ToSafeDEF(mesh.name));
+            AddXmlAttribute(shapeNode, "DEF", ToSafeDEF(mesh.name));
 
-			shapeNode.AppendChild(RendererToX3D(renderer));
+            shapeNode.AppendChild(RendererToX3D(renderer));
             shapeNode.AppendChild(MeshToX3D(mesh, renderer.lightmapScaleOffset, renderer.lightmapIndex != -1));
 
-			return shapeNode;
-		}
+            return shapeNode;
+        }
 
-		// convert a Unity Mesh to X3D
+        // convert a Unity Mesh to X3D
         static XmlNode MeshToX3D(Mesh mesh, Vector4 lightmapScaleOffset, bool hasLightmap)
-		{
+        {
             XmlNode geometryNode;
 
             // TODO: Predefined geometries and MultiTextureCoordiantes for lightmaps
             /*
-			if(mesh.name == "Sphere Instance")
-			{
-				geometryNode = CreateNode("Sphere");
-				AddXmlAttribute(geometryNode, "radius",(0.5).ToString());
-			}
-			else if(mesh.name == "Cylinder Instance")
-			{
-				geometryNode = CreateNode("Cylinder");
-			}
-			else if(mesh.name == "Cube")
-			{
-				geometryNode = CreateNode("Box");
-				AddXmlAttribute(geometryNode, "size", ToString(Vector3.one));
-			}
-			else
+            if(mesh.name == "Sphere Instance")
+            {
+                geometryNode = CreateNode("Sphere");
+                AddXmlAttribute(geometryNode, "radius",(0.5).Tools.ToString());
+            }
+            else if(mesh.name == "Cylinder Instance")
+            {
+                geometryNode = CreateNode("Cylinder");
+            }
+            else if(mesh.name == "Cube")
+            {
+                geometryNode = CreateNode("Box");
+                AddXmlAttribute(geometryNode, "size", Tools.ToString(Vector3.one));
+            }
+            else
             */
-			{
-				geometryNode = CreateNode("IndexedFaceSet");
+            {
+                geometryNode = CreateNode("IndexedFaceSet");
 
                 if (hasLightmap && Preferences.lightmapUnlitFaceSets)
                     AddXmlAttribute(geometryNode, "lit", "FALSE");
 
-				// process indices
-				XmlAttribute coordIndex = xml.CreateAttribute("coordIndex");
-				geometryNode.Attributes.Append(coordIndex);
+                // process indices
+                XmlAttribute coordIndex = xml.CreateAttribute("coordIndex");
+                geometryNode.Attributes.Append(coordIndex);
 
-				System.Text.StringBuilder sbCoordIndexValue = new System.Text.StringBuilder();
+                System.Text.StringBuilder sbCoordIndexValue = new System.Text.StringBuilder();
 
-				for(int i = 0; i < mesh.triangles.Length; i += 3)
-				{
-					sbCoordIndexValue.Append(mesh.triangles[i + 0].ToString() + " ");
-					sbCoordIndexValue.Append(mesh.triangles[i + 1].ToString() + " ");
-					sbCoordIndexValue.Append(mesh.triangles[i + 2].ToString() + " ");
-					sbCoordIndexValue.Append(" -1 ");
-				}
+                for(int i = 0; i < mesh.triangles.Length; i += 3)
+                {
+                    sbCoordIndexValue.Append(mesh.triangles[i + 0].ToString() + " ");
+                    sbCoordIndexValue.Append(mesh.triangles[i + 1].ToString() + " ");
+                    sbCoordIndexValue.Append(mesh.triangles[i + 2].ToString() + " ");
+                    sbCoordIndexValue.Append(" -1 ");
+                }
 
-				coordIndex.Value = sbCoordIndexValue.ToString();
+                coordIndex.Value = sbCoordIndexValue.ToString();
 
-				// process normals
-				if(mesh.normals.Length > 0)
-				{
-					XmlNode normalNode = CreateNode("Normal");
-					XmlAttribute vector = xml.CreateAttribute("vector");
-					normalNode.Attributes.Append(vector);
+                // process normals
+                if(mesh.normals.Length > 0)
+                {
+                    XmlNode normalNode = CreateNode("Normal");
+                    XmlAttribute vector = xml.CreateAttribute("vector");
+                    normalNode.Attributes.Append(vector);
 
-					System.Text.StringBuilder sbVectorValue = new System.Text.StringBuilder();
+                    System.Text.StringBuilder sbVectorValue = new System.Text.StringBuilder();
 
-					foreach(Vector3 n in mesh.normals)
-						sbVectorValue.Append(ToString(n) + " ");
+                    foreach(Vector3 n in mesh.normals)
+                        sbVectorValue.Append(Tools.ToString(n) + " ");
 
-					vector.Value = sbVectorValue.ToString();
+                    vector.Value = sbVectorValue.ToString();
 
-					geometryNode.AppendChild(normalNode);
-				}
+                    geometryNode.AppendChild(normalNode);
+                }
 
                 XmlNode multiTextureCoordinateNode = CreateNode("MultiTextureCoordinate");
 
-				// process vertices
-				if(mesh.vertices.Length > 0)
-				{
-					XmlNode coordinateNode = CreateNode("Coordinate");
-					XmlAttribute point = xml.CreateAttribute("point");
-					coordinateNode.Attributes.Append(point);
+                // process vertices
+                if(mesh.vertices.Length > 0)
+                {
+                    XmlNode coordinateNode = CreateNode("Coordinate");
+                    XmlAttribute point = xml.CreateAttribute("point");
+                    coordinateNode.Attributes.Append(point);
 
-					System.Text.StringBuilder sbPointValue = new System.Text.StringBuilder();
+                    System.Text.StringBuilder sbPointValue = new System.Text.StringBuilder();
 
-					foreach(Vector3 v in mesh.vertices)
-						sbPointValue.Append(ToString(v) + " ");
+                    foreach(Vector3 v in mesh.vertices)
+                        sbPointValue.Append(Tools.ToString(v) + " ");
 
-					point.Value = sbPointValue.ToString();
+                    point.Value = sbPointValue.ToString();
 
-					geometryNode.AppendChild(coordinateNode);
-				}
+                    geometryNode.AppendChild(coordinateNode);
+                }
 
                 // process lightmap UV coordinates
                 Vector2[] lightmapUVs = mesh.uv2;
@@ -339,7 +418,7 @@ namespace UnityX3D
                         vv.x += lightmapScaleOffset.z;
                         vv.y += lightmapScaleOffset.w;
 
-                        sbPointValue.Append(ToString(vv) + " ");
+                        sbPointValue.Append(Tools.ToString(vv) + " ");
                     }
 
                     point.Value = sbPointValue.ToString();
@@ -347,54 +426,54 @@ namespace UnityX3D
                     multiTextureCoordinateNode.AppendChild(textureCoordinateNode);
                 }
 
-				// process UV coordinates
+                // process UV coordinates
                 if(mesh.uv.Length > 0 && lightmapUVs != mesh.uv)
-				{
-					XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
-					XmlAttribute point = xml.CreateAttribute("point");
-					textureCoordinateNode.Attributes.Append(point);
+                {
+                    XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
+                    XmlAttribute point = xml.CreateAttribute("point");
+                    textureCoordinateNode.Attributes.Append(point);
 
-					System.Text.StringBuilder sbPointValue = new System.Text.StringBuilder();
+                    System.Text.StringBuilder sbPointValue = new System.Text.StringBuilder();
 
                     foreach (Vector2 v in mesh.uv)
                     {
-                        sbPointValue.Append(ToString(v) + " ");
+                        sbPointValue.Append(Tools.ToString(v) + " ");
                     }
 
-					point.Value = sbPointValue.ToString();
+                    point.Value = sbPointValue.ToString();
 
                     multiTextureCoordinateNode.AppendChild(textureCoordinateNode);
-				}
+                }
 
                 geometryNode.AppendChild(multiTextureCoordinateNode);
-			}
+            }
 
-			return geometryNode;
-		}
+            return geometryNode;
+        }
 
-		// Find a texture asset and copy it to the output path of the X3D file
+        // Find a texture asset and copy it to the output path of the X3D file
         static string WriteTextureFile(Texture texture)
-		{
-			string path = AssetDatabase.GetAssetPath(texture);
-			string file = Path.GetFileName(path);
-			
-			if (file != "")
-				// TODO maybe prompt for each overwrite?
-				File.Copy(path, outputPath + "/" + file, true);
-			else
-			{
-				Texture2D tex2d = texture as Texture2D;
-				
-				if (tex2d)
-				{
-					file = System.Guid.NewGuid().ToString();
-					byte[] bytes = tex2d.EncodeToPNG();
-					File.WriteAllBytes(outputPath + "/" + file, bytes);
-				}
-			}
+        {
+            string path = AssetDatabase.GetAssetPath(texture);
+            string file = Path.GetFileName(path);
+            
+            if (file != "")
+                // TODO maybe prompt for each overwrite?
+                File.Copy(path, outputPath + "/" + file, true);
+            else
+            {
+                Texture2D tex2d = texture as Texture2D;
+                
+                if (tex2d)
+                {
+                    file = System.Guid.NewGuid().ToString();
+                    byte[] bytes = tex2d.EncodeToPNG();
+                    File.WriteAllBytes(outputPath + "/" + file, bytes);
+                }
+            }
 
-			return file;
-		}
+            return file;
+        }
 
         static Texture2D CreateReadableTexture(Texture2D texture, bool isLinear)
         {
@@ -456,7 +535,7 @@ namespace UnityX3D
             if (Preferences.savePNGlightmaps)
             {
                 LightmapData lightmapData = LightmapSettings.lightmaps[renderer.lightmapIndex];
-                Texture2D lightMap = CreateReadableTexture(lightmapData.lightmapFar, false);
+                Texture2D lightMap = CreateReadableTexture(lightmapData.lightmapColor, false);
 
                 byte[] bytes = lightMap.EncodeToPNG();
                 File.WriteAllBytes(outputPath + "/" + file, bytes);
@@ -469,16 +548,16 @@ namespace UnityX3D
             return file;
         }
 
-		// convert a Unity Texture to X3D
+        // convert a Unity Texture to X3D
         static XmlNode TextureToX3D(string filename, string containerFieldName = "", bool css = false)
-		{
-			XmlNode textureNode = null;
+        {
+            XmlNode textureNode = null;
 
-			XmlNode imageTexture2DNode = CreateNode("ImageTexture2D");
-			XmlAttribute url = xml.CreateAttribute("url");
-			imageTexture2DNode.Attributes.Append(url);
+            XmlNode imageTexture2DNode = CreateNode("ImageTexture2D");
+            XmlAttribute url = xml.CreateAttribute("url");
+            imageTexture2DNode.Attributes.Append(url);
 
-			url.Value = filename;
+            url.Value = filename;
 
             if (filename.EndsWith(".exr"))
             {
@@ -488,24 +567,24 @@ namespace UnityX3D
                 imageTexture2DNode.AppendChild(texturePropertiesNode);
             }
 
-			if (css)
-			{
-				XmlNode surfaceShaderTextureNode = CreateNode ("SurfaceShaderTexture");
-				textureNode = surfaceShaderTextureNode;
-				textureNode.AppendChild(imageTexture2DNode);
-			}
-			else
-				textureNode = imageTexture2DNode;
+            if (css)
+            {
+                XmlNode surfaceShaderTextureNode = CreateNode ("SurfaceShaderTexture");
+                textureNode = surfaceShaderTextureNode;
+                textureNode.AppendChild(imageTexture2DNode);
+            }
+            else
+                textureNode = imageTexture2DNode;
 
-			if(containerFieldName.Length != 0)
-			{
-				XmlAttribute containerField = xml.CreateAttribute("containerField");
-				containerField.Value = containerFieldName;
-				textureNode.Attributes.Append(containerField);
-			}
+            if(containerFieldName.Length != 0)
+            {
+                XmlAttribute containerField = xml.CreateAttribute("containerField");
+                containerField.Value = containerFieldName;
+                textureNode.Attributes.Append(containerField);
+            }
 
-			return textureNode;
-		}
+            return textureNode;
+        }
 
         static XmlNode TextureToX3D(Texture2D texture, string containerFieldName = "", bool css = false)
         {
@@ -521,10 +600,10 @@ namespace UnityX3D
             return TextureToX3D(filename, containerFieldName, css);;
         }
 
-		// convert a Unity Renderer to X3D
+        // convert a Unity Renderer to X3D
         static XmlNode RendererToX3D(Renderer renderer)
-		{
-			Material material = renderer.sharedMaterial;
+        {
+            Material material = renderer.sharedMaterial;
             XmlNode appearanceNode = CreateNode("Appearance");
 
             if (material == null || material.shader == null)
@@ -533,7 +612,7 @@ namespace UnityX3D
                 return appearanceNode;
             }
 
-			// handle the Standard PBR shader
+            // handle the Standard PBR shader
             if (material.shader.name == "Standard")
             {
                 Color color = material.GetColor("_Color");
@@ -545,7 +624,7 @@ namespace UnityX3D
                 Color emissionColor = material.GetColor("_EmissionColor");
                 Texture2D emissionMap = material.GetTexture("_EmissionMap") as Texture2D;
                 Vector4 uvTiling = material.GetVector("_MainTex_ST");
-				
+                
                 // if the Renderer has a lightmap
                 bool hasLightmap = renderer.lightmapIndex != -1;
 
@@ -581,25 +660,25 @@ namespace UnityX3D
 
                     // TODO: find environment map for glossy reflection
                     /*
-					if(RenderSettings.skybox.name != "Default-Skybox")
-					{
-						// find cubemap texture
-						string id = ...;
-						string path = AssetDatabase.GUIDToAssetPath(id);
-						Texture2D cubemap = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                    if(RenderSettings.skybox.name != "Default-Skybox")
+                    {
+                        // find cubemap texture
+                        string id = ...;
+                        string path = AssetDatabase.GUIDToAssetPath(id);
+                        Texture2D cubemap = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
 
-						css.AppendChild(toX3D(cubemap, "reflectionTexture"));
-						addAttribute(css, "reflectionTextureId", textureId.ToString());
-						textureId++;
-					}
-					*/
+                        css.AppendChild(toX3D(cubemap, "reflectionTexture"));
+                        addAttribute(css, "reflectionTextureId", textureId.Tools.ToString());
+                        textureId++;
+                    }
+                    */
 
-                    AddXmlAttribute(css, "ambientFactor", ToString(new Vector3(1, 1, 1)));
-                    AddXmlAttribute(css, "specularFactor", ToString(new Vector3(1, 1, 1) * metalness));
-                    AddXmlAttribute(css, "diffuseFactor", ToString(color * (1 - metalness)));
+                    AddXmlAttribute(css, "ambientFactor", Tools.ToString(new Vector3(1, 1, 1)));
+                    AddXmlAttribute(css, "specularFactor", Tools.ToString(new Vector3(1, 1, 1) * metalness));
+                    AddXmlAttribute(css, "diffuseFactor", Tools.ToString(color * (1 - metalness)));
                     AddXmlAttribute(css, "shininessFactor", (smoothness * smoothness).ToString());
-                    AddXmlAttribute(css, "emissiveFactor", ToString(emissionColor));
-                    //AddXmlAttribute(css, "reflectionFactor", ToString(new Vector3(1, 1, 1) * metalness));
+                    AddXmlAttribute(css, "emissiveFactor", Tools.ToString(emissionColor));
+                    //AddXmlAttribute(css, "reflectionFactor", Tools.ToString(new Vector3(1, 1, 1) * metalness));
 
                     appearanceNode.AppendChild(css);
                 }
@@ -607,10 +686,10 @@ namespace UnityX3D
                 {
                     // write color
                     XmlNode materialNode = CreateNode("Material");
-                    AddXmlAttribute(materialNode, "diffuseColor", ToString(color * (1 - metalness)));
-                    AddXmlAttribute(materialNode, "specularColor", ToString(Vector3.one * metalness));
+                    AddXmlAttribute(materialNode, "diffuseColor", Tools.ToString(color * (1 - metalness)));
+                    AddXmlAttribute(materialNode, "specularColor", Tools.ToString(Vector3.one * metalness));
                     AddXmlAttribute(materialNode, "shininess", (smoothness * smoothness).ToString());
-                    AddXmlAttribute(materialNode, "emissiveColor", ToString(emissionColor));
+                    AddXmlAttribute(materialNode, "emissiveColor", Tools.ToString(emissionColor));
                     AddXmlAttribute(materialNode, "ambientIntensity", RenderSettings.ambientIntensity.ToString());
 
                     XmlNode multiTextureNode = CreateNode("MultiTexture");
@@ -647,156 +726,156 @@ namespace UnityX3D
             else
                 Debug.LogWarning(renderer.name + " has no Standard material");
 
-			return appearanceNode;
-		}
+            return appearanceNode;
+        }
 
-		// convert a Unity Light to X3D
+        // convert a Unity Light to X3D
         static XmlNode LightToX3D(Light light)
-		{
-			XmlNode lightNode;
+        {
+            XmlNode lightNode;
 
-			switch(light.type)
-			{
-			case LightType.Spot:
-				lightNode = CreateNode("SpotLight");
-				break;
+            switch(light.type)
+            {
+            case LightType.Spot:
+                lightNode = CreateNode("SpotLight");
+                break;
 
-			case LightType.Directional:
-				lightNode = CreateNode("DirectionalLight");
-				break;
+            case LightType.Directional:
+                lightNode = CreateNode("DirectionalLight");
+                break;
 
-			default:
-				lightNode = CreateNode("PointLight");
-				break;
-			}
+            default:
+                lightNode = CreateNode("PointLight");
+                break;
+            }
 
-			AddXmlAttribute(lightNode, "DEF", ToSafeDEF(light.name));
-		
+            AddXmlAttribute(lightNode, "DEF", ToSafeDEF(light.name));
+        
             /*
             if (Preferences.bakedLightsAmbient && light)
-                AddXmlAttribute(lightNode, "ambientIntensity", light.intensity.ToString());
+                AddXmlAttribute(lightNode, "ambientIntensity", light.intensity.Tools.ToString());
             else
             */
                 AddXmlAttribute(lightNode, "intensity", light.intensity.ToString());
 
-            AddXmlAttribute(lightNode, "color", ToString(light.color));
+            AddXmlAttribute(lightNode, "color", Tools.ToString(light.color));
 
-			switch(light.type)
-			{
-			case LightType.Spot:
-				AddXmlAttribute(lightNode, "cutOffAngle",(light.spotAngle * Mathf.PI / 180).ToString());
-				AddXmlAttribute(lightNode, "radius", light.range.ToString());
-				break;
+            switch(light.type)
+            {
+            case LightType.Spot:
+                AddXmlAttribute(lightNode, "cutOffAngle",(light.spotAngle * Mathf.PI / 180).ToString());
+                AddXmlAttribute(lightNode, "radius", light.range.ToString());
+                break;
 
-			case LightType.Directional:
-				break;
+            case LightType.Directional:
+                break;
 
-			default:
-				AddXmlAttribute(lightNode, "radius", light.range.ToString());
-				break;
-			}
+            default:
+                AddXmlAttribute(lightNode, "radius", light.range.ToString());
+                break;
+            }
 
-			return lightNode;
-		}
+            return lightNode;
+        }
 
         static void ExportRenderSettings()
-		{
-			XmlNode navigationInfoNode = CreateNode("NavigationInfo");
+        {
+            XmlNode navigationInfoNode = CreateNode("NavigationInfo");
             AddXmlAttribute(navigationInfoNode, "headlight", Preferences.disableHeadlight ? "FALSE" : "TRUE");
             sceneNode.AppendChild(navigationInfoNode);
 
-			/*
-			if(RenderSettings.skybox.name != "Default-Skybox")
-			{
-				// find cubemap texture
+            /*
+            if(RenderSettings.skybox.name != "Default-Skybox")
+            {
+                // find cubemap texture
 
-				string id = ... // find Asset in DB
-				string path = AssetDatabase.GUIDToAssetPath(id);
-				Texture2D cubemap = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                string id = ... // find Asset in DB
+                string path = AssetDatabase.GUIDToAssetPath(id);
+                Texture2D cubemap = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
 
-				XmlNode skydomeBackground = CreateNode("SkydomeBackground");
-				XmlNode appearance = CreateNode("Appearance");
+                XmlNode skydomeBackground = CreateNode("SkydomeBackground");
+                XmlNode appearance = CreateNode("Appearance");
 
-				skydomeBackground.AppendChild(appearance);
-				appearance.AppendChild(toX3D(cubemap));
+                skydomeBackground.AppendChild(appearance);
+                appearance.AppendChild(toX3D(cubemap));
 
-				addAttribute(skydomeBackground, "sphereRes", "32");
+                addAttribute(skydomeBackground, "sphereRes", "32");
 
-				sceneNode.AppendChild(skydomeBackground);
+                sceneNode.AppendChild(skydomeBackground);
 
-			}
-			else
-			*/
-			{
-				XmlNode solidBackground = CreateNode("SolidBackground");
-				AddXmlAttribute(solidBackground, "color", ToString(RenderSettings.ambientSkyColor));
-				sceneNode.AppendChild(solidBackground);
-			}
-		}
+            }
+            else
+            */
+            {
+                XmlNode solidBackground = CreateNode("SolidBackground");
+                AddXmlAttribute(solidBackground, "color", Tools.ToString(RenderSettings.ambientSkyColor));
+                sceneNode.AppendChild(solidBackground);
+            }
+        }
 
         static XmlNode TransformToX3D(Transform transform)
-		{
+        {
             EditorUtility.DisplayProgressBar("UnityX3D", "Exporting scene...", (float)currentNodeIndex/numNodesToExport);
             currentNodeIndex++;
             
-			XmlNode transformNode;
-			transformNode = CreateNode("Transform");
+            XmlNode transformNode;
+            transformNode = CreateNode("Transform");
 
-			AddXmlAttribute(transformNode, "DEF", ToSafeDEF(transform.name));
-			AddXmlAttribute(transformNode, "translation", ToString(transform.transform.localPosition));
+            AddXmlAttribute(transformNode, "DEF", ToSafeDEF(transform.name));
+            AddXmlAttribute(transformNode, "translation", Tools.ToString(transform.transform.localPosition));
 
-			float angle = 0F;
-			Vector3 axis = Vector3.zero;
-			transform.transform.localRotation.ToAngleAxis(out angle, out axis);
-			AddXmlAttribute(transformNode, "rotation",  ToString(axis) + " " + ToRadians(angle).ToString());
+            float angle = 0F;
+            Vector3 axis = Vector3.zero;
+            transform.transform.localRotation.ToAngleAxis(out angle, out axis);
+            AddXmlAttribute(transformNode, "rotation",  Tools.ToString(axis) + " " + Tools.ToRadians(angle).ToString());
 
-			AddXmlAttribute(transformNode, "scale", ToString(transform.transform.localScale));
+            AddXmlAttribute(transformNode, "scale", Tools.ToString(transform.transform.localScale));
 
-			if(transform.GetComponent<Camera>())
-			{
-				transformNode.AppendChild
-				(
-					CameraToX3D(transform.GetComponent<Camera>())
-				);
-			}
+            if(transform.GetComponent<Camera>())
+            {
+                transformNode.AppendChild
+                (
+                    CameraToX3D(transform.GetComponent<Camera>())
+                );
+            }
 
-			if(transform.GetComponent<Light>())
-			{
-				transformNode.AppendChild
-				(
-					LightToX3D(transform.GetComponent<Light>())
-				);
-			}
+            if(transform.GetComponent<Light>())
+            {
+                transformNode.AppendChild
+                (
+                    LightToX3D(transform.GetComponent<Light>())
+                );
+            }
 
-			if(transform.GetComponent<MeshFilter>())
-			{
-				MeshFilter m = transform.GetComponent<MeshFilter>();
-				
+            if(transform.GetComponent<MeshFilter>())
+            {
+                MeshFilter m = transform.GetComponent<MeshFilter>();
+                
                 XmlNode meshNode = ObjectToX3D(m.name, m.sharedMesh, transform.GetComponent<Renderer>());
 
                 if (meshNode != null)
-    				transformNode.AppendChild
-    				(
-    					meshNode
-    				);
-			}
+                    transformNode.AppendChild
+                    (
+                        meshNode
+                    );
+            }
 
-			if(transform.GetComponent<SkinnedMeshRenderer>())
-			{
-				SkinnedMeshRenderer m = transform.GetComponent<SkinnedMeshRenderer>();
-				
-				transformNode.AppendChild
-				(
-					ObjectToX3D(m.name, m.sharedMesh, transform.GetComponent<Renderer>())
-				);
-			}
+            if(transform.GetComponent<SkinnedMeshRenderer>())
+            {
+                SkinnedMeshRenderer m = transform.GetComponent<SkinnedMeshRenderer>();
+                
+                transformNode.AppendChild
+                (
+                    ObjectToX3D(m.name, m.sharedMesh, transform.GetComponent<Renderer>())
+                );
+            }
 
-			// recurse through children
-			foreach(Transform child in transform)
-				transformNode.AppendChild(TransformToX3D(child));
+            // recurse through children
+            foreach(Transform child in transform)
+                transformNode.AppendChild(TransformToX3D(child));
 
-			return transformNode;
-		}
+            return transformNode;
+        }
 
         static int CountNodes(Transform tr)
         {
@@ -809,10 +888,10 @@ namespace UnityX3D
             return count + tr.childCount;
         }
 
-        [MenuItem("File/Export X3D")]
+        [MenuItem("Assets/X3D/Export X3D...")]
         static void ExportX3D()
         {
-            ClearConsole();
+            Tools.ClearConsole();
 
             try
             {
@@ -851,7 +930,7 @@ namespace UnityX3D
                 AddXmlAttribute(lhToRh, "scale", "1 1 -1");
                 sceneNode.AppendChild(lhToRh);
                 
-    			sceneNode = lhToRh;
+                sceneNode = lhToRh;
 
                 currentNodeIndex = 0;
                 numNodesToExport = 0;
@@ -872,5 +951,5 @@ namespace UnityX3D
 
             EditorUtility.ClearProgressBar();
         }
-	}
+    }
 }

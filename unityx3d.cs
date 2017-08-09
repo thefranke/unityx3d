@@ -136,7 +136,7 @@ namespace UnityX3D
             return tokens.Select(float.Parse).ToArray();
         }
 
-        public static Vector3 Vector3FromString(string v)
+        public static Vector3 Vector3FromString(string v, float defaultScalar = 0)
         {
             float[] floatTokens = FloatArrayFromString(v);
             
@@ -146,7 +146,20 @@ namespace UnityX3D
             if (floatTokens.Length == 1)
                 return new Vector3(floatTokens[0], floatTokens[0], floatTokens[0]);
 
-            return new Vector3(0, 0, 0);
+            return new Vector3(defaultScalar, defaultScalar, defaultScalar);
+        }
+
+        public static Vector4 Vector4FromString(string v, float defaultScalar = 0)
+        {
+            float[] floatTokens = FloatArrayFromString(v);
+
+            if (floatTokens.Length >= 4)
+                return new Vector4(floatTokens[0], floatTokens[1], floatTokens[2], floatTokens[3]);
+
+            if (floatTokens.Length == 1)
+                return new Vector4(floatTokens[0], floatTokens[0], floatTokens[0], floatTokens[0]);
+
+            return new Vector4(defaultScalar, defaultScalar, defaultScalar, defaultScalar);
         }
 
         // Helper to convert a Color to a string
@@ -157,7 +170,12 @@ namespace UnityX3D
 
         public static double ToRadians(double angle)
         {
-            return (Mathf.PI / 180) * angle;
+            return Mathf.Deg2Rad * angle;
+        }
+
+        public static float ToDegrees(float radians)
+        {
+            return Mathf.Rad2Deg * radians;
         }
     }
 
@@ -198,9 +216,14 @@ namespace UnityX3D
             return "";
         }
 
-        static Vector3 Vector3FromAttribute(XmlNode node, string attrib)
+        static Vector3 Vector3FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
         {
-            return Tools.Vector3FromString(GetAttribute(node, attrib));
+            return Tools.Vector3FromString(GetAttribute(node, attrib), defaultScalar);
+        }
+
+        static Vector4 Vector4FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
+        {
+            return Tools.Vector4FromString(GetAttribute(node, attrib), defaultScalar);
         }
 
         static float FloatFromAttribute(XmlNode node, string attrib)
@@ -215,7 +238,7 @@ namespace UnityX3D
 
         static void ReadBox(XmlNode boxNode, GameObject obj)
         {
-            Vector3 size = Vector3FromAttribute(boxNode, "size");
+            Vector3 size = Vector3FromAttribute(boxNode, "size", 1);
             obj.transform.localScale = size;
 
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -298,9 +321,28 @@ namespace UnityX3D
 
         static void ReadCommonSurfaceShader(XmlNode cssNode, GameObject obj)
         {
-            //Renderer renderer = obj.GetComponent<MeshRenderer>();
+            Renderer renderer = obj.GetComponent<MeshRenderer>();
 
-            // TODO
+            Vector3 specular = Vector3FromAttribute(cssNode, "specularFactor");
+            float metalness = specular.magnitude;
+            renderer.sharedMaterial.SetFloat("_Metallic", metalness);
+
+            float shininess = FloatFromAttribute(cssNode, "shininessFactor");
+            float smoothness = Mathf.Sqrt(shininess);
+            renderer.sharedMaterial.SetFloat("_Glossiness", smoothness);
+
+            Vector3 diffuse = Vector3FromAttribute(cssNode, "diffuseFactor");
+            Color diffuseColor = new Color(diffuse[0], diffuse[1], diffuse[2]);
+            renderer.sharedMaterial.SetColor("_Color", diffuseColor * 1.0f / (1 - metalness));
+
+            Vector3 emissive = Vector3FromAttribute(cssNode, "emissionColor");
+            Color emissiveColor = new Color(emissive[0], emissive[1], emissive[2]);
+            renderer.sharedMaterial.SetColor("_EmissionColor", emissiveColor);
+
+            Vector3 ambientFactor = Vector3FromAttribute(cssNode, "ambientFactor");
+            RenderSettings.ambientIntensity = ambientFactor.magnitude;
+            
+            // TODO: Textures
         }
 
         static void ReadMaterial(XmlNode materialNode, GameObject obj)
@@ -317,7 +359,7 @@ namespace UnityX3D
 
             Vector3 diffuse = Vector3FromAttribute(materialNode, "diffuseColor");
             Color diffuseColor = new Color (diffuse[0], diffuse[1], diffuse[2]);
-            renderer.sharedMaterial.SetColor("_Color", diffuseColor * (1 - metalness));
+            renderer.sharedMaterial.SetColor("_Color", diffuseColor * 1.0f / (1 - metalness));
             
             Vector3 emissive = Vector3FromAttribute(materialNode, "emissiveColor");
             Color emissiveColor = new Color(emissive[0], emissive[1], emissive[2]);
@@ -326,11 +368,7 @@ namespace UnityX3D
             float ambientIntensity = FloatFromAttribute(materialNode, "ambientIntensity");
             RenderSettings.ambientIntensity = ambientIntensity;
 
-            //Texture2D albedoMap = material.GetTexture("_MainTex") as Texture2D;
-            //Texture2D metallicGlossMap = material.GetTexture("_MetallicGlossMap") as Texture2D;
-            //Texture2D normalMap = material.GetTexture("_BumpMap") as Texture2D;
-            //Texture2D emissionMap = material.GetTexture("_EmissionMap") as Texture2D;
-            //Vector4 uvTiling = material.GetVector("_MainTex_ST");           
+            // TODO: Textures
         }
 
         static void ReadAppearance(XmlNode appearanceNode, GameObject obj)
@@ -387,6 +425,14 @@ namespace UnityX3D
             Vector3 translate = Vector3FromAttribute(transformNode, "translation");
             obj.transform.localPosition = translate;
 
+            Vector4 rotation = Vector4FromAttribute(transformNode, "rotation");
+            Vector3 axis = new Vector3(rotation[0], rotation[1], rotation[2]);
+            float angle = Tools.ToDegrees(rotation[3]);
+            obj.transform.rotation = Quaternion.AngleAxis(angle, axis);
+
+            Vector3 scale = Vector3FromAttribute(transformNode, "scale", 1);
+            obj.transform.localScale = scale;
+            
             ReadX3D(transformNode, obj);
         }
 

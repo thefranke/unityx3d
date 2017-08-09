@@ -1,7 +1,7 @@
 /*
  * UnityX3D
  *
- * Copyright (c) 2015 Tobias Alexander Franke
+ * Copyright (c) 2017 Tobias Alexander Franke
  * http://www.tobias-franke.eu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -100,19 +100,56 @@ namespace UnityX3D
             Debug.ClearDeveloperConsole();
         }
 
-        // helper to convert a Vector2 to a string
+        // Helper to convert a Vector2 to a string
         public static string ToString(Vector2 v)
         {
             return v.x + " " + v.y;
         }
 
-        // helper to convert a Vector3 to a string
+        // Helper to convert a Vector3 to a string
         public static string ToString(Vector3 v)
         {
             return v.x + " " + v.y + " " + v.z;
         }
 
-        // helper to convert a Color to a string
+        public static string[] TokensFromString(string v)
+        {
+            if (v != "")
+            { 
+                char[] delimiters = new char[] { ',', ' ' };
+                string[] tokens = v.Split(delimiters);
+                return tokens.Where(x => !string.IsNullOrEmpty(x)).ToArray();
+            }
+
+            return new string[] { };
+        }
+
+        public static int[] IntArrayFromString(string v)
+        {
+            string[] tokens = TokensFromString(v);
+            return tokens.Select(int.Parse).ToArray();
+        }
+
+        public static float[] FloatArrayFromString(string v)
+        {
+            string[] tokens = TokensFromString(v);
+            return tokens.Select(float.Parse).ToArray();
+        }
+
+        public static Vector3 Vector3FromString(string v)
+        {
+            float[] floatTokens = FloatArrayFromString(v);
+            
+            if (floatTokens.Length >= 3)
+                return new Vector3(floatTokens[0], floatTokens[1], floatTokens[2]);
+
+            if (floatTokens.Length == 1)
+                return new Vector3(floatTokens[0], floatTokens[0], floatTokens[0]);
+
+            return new Vector3(0, 0, 0);
+        }
+
+        // Helper to convert a Color to a string
         public static string ToString(Color c)
         {
             return c.r + " " + c.g + " " + c.b;
@@ -123,19 +160,24 @@ namespace UnityX3D
             return (Mathf.PI / 180) * angle;
         }
     }
-    
+
     /*
      * This is the main class responsible for importing an X3D document
      */
     class X3DImporter : AssetPostprocessor
     {
-        public static string GetName(XmlNode node)
+        static protected Dictionary<string, GameObject> DefToObjMap = new Dictionary<string, GameObject>();
+
+        public static string GetName(XmlNode node, GameObject obj)
         {
             if (node.Attributes != null)
             {
                 var name = node.Attributes["DEF"];
                 if (name != null)
+                {
+                    DefToObjMap[name.Value] = obj;
                     return name.Value;
+                }
             }
 
             if (node.Name != null)
@@ -144,28 +186,228 @@ namespace UnityX3D
                 return "Unnamed";
         }
 
-        static void ReadShape()
+        static string GetAttribute(XmlNode node, string attrib)
         {
+            if (node.Attributes != null)
+            {
+                var a = node.Attributes[attrib];
+                if (a != null)
+                    return a.Value;
+            }
 
+            return "";
         }
 
-        static void ReadInline()
+        static Vector3 Vector3FromAttribute(XmlNode node, string attrib)
         {
+            return Tools.Vector3FromString(GetAttribute(node, attrib));
+        }
 
+        static float FloatFromAttribute(XmlNode node, string attrib)
+        {
+            string v = GetAttribute(node, attrib);
+
+            if (v == "")
+                return 0;
+
+            return float.Parse(v);
+        }
+
+        static void ReadBox(XmlNode boxNode, GameObject obj)
+        {
+            Vector3 size = Vector3FromAttribute(boxNode, "size");
+            obj.transform.localScale = size;
+
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
+            meshFilter.mesh = cube.GetComponent<MeshFilter>().sharedMesh;
+            GameObject.DestroyImmediate(cube);
+        }
+
+        static void ReadIndexedFaceSet(XmlNode indexedFaceSetNode, GameObject obj)
+        {
+            int[] coordIndex = Tools.IntArrayFromString(GetAttribute(indexedFaceSetNode, "coordIndex"));
+            if (coordIndex.Length == 0)
+                return;
+
+            XmlNode coordinateNode = null;
+            XmlNode normalNode = null;
+
+            foreach(XmlNode child in indexedFaceSetNode)
+            {
+                if (child.Name == "Coordinate")
+                    coordinateNode = child;
+
+                if (child.Name == "Normal")
+                    normalNode = child;
+            }
+
+            if (coordinateNode == null)
+                return;
+            
+            MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
+            Mesh mesh = new Mesh();
+
+            // Setup vertices
+            {
+                float[] points = Tools.FloatArrayFromString(GetAttribute(coordinateNode, "point"));
+                List<Vector3> vertices = new List<Vector3>();
+
+                for (int i = 0; i < points.Length; i += 3)
+                {
+                    vertices.Add(new Vector3(points[i + 0], points[i + 1], points[i + 2]));
+                }
+
+                mesh.SetVertices(vertices);
+            }
+
+            // Setup normals
+            if (normalNode != null)
+            {
+                float[] vectors = Tools.FloatArrayFromString(GetAttribute(normalNode, "vector"));
+                List<Vector3> normals = new List<Vector3>();
+
+                for (int i = 0; i < vectors.Length; i += 3)
+                {
+                    normals.Add(new Vector3(vectors[i + 0], vectors[i + 1], vectors[i + 2]));
+                }
+
+                mesh.SetNormals(normals);
+            }
+
+            // Setup indices
+            { 
+                int size = coordIndex.Length / 4 * 3;
+
+                // Filter out every fourth entry
+                int[] triangles = new int[size];
+                int j = 0;
+                for (int i = 0; i < coordIndex.Length; i += 4, j += 3)
+                {
+                    triangles[j + 0] = coordIndex[i + 0];
+                    triangles[j + 1] = coordIndex[i + 1];
+                    triangles[j + 2] = coordIndex[i + 2];
+                }
+
+                mesh.SetTriangles(triangles, 0);
+            }
+
+            // Insert mesh
+            meshFilter.mesh = mesh;
+        }
+
+        static void ReadCommonSurfaceShader(XmlNode cssNode, GameObject obj)
+        {
+            //Renderer renderer = obj.GetComponent<MeshRenderer>();
+
+            // TODO
+        }
+
+        static void ReadMaterial(XmlNode materialNode, GameObject obj)
+        {
+            Renderer renderer = obj.GetComponent<MeshRenderer>();
+
+            Vector3 specular = Vector3FromAttribute(materialNode, "specularColor");
+            float metalness = specular.magnitude;
+            renderer.sharedMaterial.SetFloat("_Metallic", metalness);
+
+            float shininess = FloatFromAttribute(materialNode, "shininess");
+            float smoothness = Mathf.Sqrt(shininess);
+            renderer.sharedMaterial.SetFloat("_Glossiness", smoothness);
+
+            Vector3 diffuse = Vector3FromAttribute(materialNode, "diffuseColor");
+            Color diffuseColor = new Color (diffuse[0], diffuse[1], diffuse[2]);
+            renderer.sharedMaterial.SetColor("_Color", diffuseColor * (1 - metalness));
+            
+            Vector3 emissive = Vector3FromAttribute(materialNode, "emissiveColor");
+            Color emissiveColor = new Color(emissive[0], emissive[1], emissive[2]);
+            renderer.sharedMaterial.SetColor("_EmissionColor", emissiveColor);
+
+            float ambientIntensity = FloatFromAttribute(materialNode, "ambientIntensity");
+            RenderSettings.ambientIntensity = ambientIntensity;
+
+            //Texture2D albedoMap = material.GetTexture("_MainTex") as Texture2D;
+            //Texture2D metallicGlossMap = material.GetTexture("_MetallicGlossMap") as Texture2D;
+            //Texture2D normalMap = material.GetTexture("_BumpMap") as Texture2D;
+            //Texture2D emissionMap = material.GetTexture("_EmissionMap") as Texture2D;
+            //Vector4 uvTiling = material.GetVector("_MainTex_ST");           
+        }
+
+        static void ReadAppearance(XmlNode appearanceNode, GameObject obj)
+        {
+            // Add dummy material just in case Shape didn't come with a material
+            Renderer renderer = obj.AddComponent<MeshRenderer>();
+            renderer.material = new Material(Shader.Find("Standard"));
+
+            // Detect some kind of material
+            foreach (XmlNode child in appearanceNode.ChildNodes)
+            {
+                if (child.Name == "Material")
+                {
+                    ReadMaterial(child, obj);
+                    break;
+                }
+                else if (child.Name == "CommonSurfaceShader")
+                {
+                    ReadCommonSurfaceShader(child, obj);
+                    break;
+                }
+            }
+        }
+
+        static void ReadShape(XmlNode shapeNode, GameObject obj)
+        {
+            // Detect some kind of mesh (only one)
+            foreach (XmlNode child in shapeNode.ChildNodes)
+            {
+                if (child.Name == "Box")
+                {
+                    ReadBox(child, obj);
+                    break;
+                }
+                else if (child.Name == "IndexedFaceSet")
+                {
+                    ReadIndexedFaceSet(child, obj);
+                    break;
+                }
+            }
+
+            // Detect other relevant attributes
+            foreach (XmlNode child in shapeNode.ChildNodes)
+            {
+                if (child.Name == "Appearance")
+                {
+                    ReadAppearance(child, obj);
+                }
+            }
         }
 
         static void ReadTransform(XmlNode transformNode, GameObject obj)
         {
+            Vector3 translate = Vector3FromAttribute(transformNode, "translation");
+            obj.transform.localPosition = translate;
+
+            ReadX3D(transformNode, obj);
         }
 
-        static void ReadChildren(XmlNode node, GameObject parent)
+        static void ReadX3D(XmlNode node, GameObject parent)
         {
             foreach (XmlNode childNode in node)
             {
+                // Filter out comments
                 if (childNode.Name == "#comment")
                     continue;
 
-                GameObject obj = new GameObject(GetName(childNode));
+                // Re-use object? TODO: Wait until whole document is actually parsed
+                string use = GetAttribute(childNode, "USE");
+                if (use != "" && DefToObjMap.Keys.Contains(use))
+                {
+                    Object.Instantiate(DefToObjMap[use], parent.transform, false);
+                    continue;
+                }
+
+                GameObject obj = new GameObject();
+                obj.name = GetName(childNode, obj);
 
                 // Setup parent node
                 if (parent != null)
@@ -174,7 +416,8 @@ namespace UnityX3D
                 if (childNode.Name == "Transform")
                     ReadTransform(childNode, obj);
 
-                ReadChildren(childNode, obj);
+                if (childNode.Name == "Shape")
+                    ReadShape(childNode, obj);
             }
         }
 
@@ -191,7 +434,8 @@ namespace UnityX3D
                 XmlNode x3dNode = xml.SelectSingleNode("X3D");
                 XmlNode sceneNode = x3dNode.SelectSingleNode("Scene");
 
-                ReadChildren(sceneNode, null);
+                GameObject scene = new GameObject("Scene");
+                ReadX3D(sceneNode, scene);
             }
             catch (System.Exception e)
             {

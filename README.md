@@ -1,8 +1,8 @@
 # UnityX3D
 
-This script is a handler for X3D, an open standard to represent 3D scenes/applications in an XML dialect. By simply dropping  **unityx3d.cs** into your Unity assets, a new menu entry **File/X3D** should appear.
+This script is a handler for X3D, an open standard to represent 3D scenes/applications in an XML dialect. By simply dropping **unityx3d.cs** into your Unity assets, a new menu entry **Assets/X3D** should appear.
 
-Simply select parts of the scene or everything  with CTRL+A and click **File/X3D/Export to X3D**. Currently, there is an option to use the CommonSurfaceShader instead of the standard X3D material to enhance some of the material visuals.
+Simply select parts of the scene or everything  with CTRL+A and click **Assets/X3D/Export to X3D**. Currently, there is an option to use the CommonSurfaceShader instead of the standard X3D material to enhance some of the material visuals.
 
 # Open issues
 
@@ -18,4 +18,4 @@ Simply select parts of the scene or everything  with CTRL+A and click **File/X3D
 
 * **Mesh**: Animated meshes with rigs aren't exported. HAnim would make sense here.
 
-* **Import**: The X3D importer is only a stub.
+* **Import**: The X3D importer is incomplete.

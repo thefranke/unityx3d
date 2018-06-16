@@ -692,7 +692,7 @@ namespace UnityX3D
 
                 if (lightmapUVs.Length > 0 && Preferences.exportLightmaps)
                 {
-                    XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
+                    XmlNode textureCoordinateNode = CreateNode("TextureCoordinate");
                     XmlAttribute point = xml.CreateAttribute("point");
                     textureCoordinateNode.Attributes.Append(point);
 
@@ -719,7 +719,7 @@ namespace UnityX3D
                 // process UV coordinates
                 if(mesh.uv.Length > 0 && lightmapUVs != mesh.uv)
                 {
-                    XmlNode textureCoordinateNode = CreateNode("TextureCoordinate2D");
+                    XmlNode textureCoordinateNode = CreateNode("TextureCoordinate");
                     XmlAttribute point = xml.CreateAttribute("point");
                     textureCoordinateNode.Attributes.Append(point);
 

@@ -29,6 +29,7 @@ using UnityEditor;
 using System.IO;
 using System.Xml;
 using System.Linq;
+using System.Text;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -1237,7 +1238,10 @@ namespace UnityX3D
                 foreach(Transform tr in trs)
                     sceneNode.AppendChild(TransformToX3D(tr));
 
-                xml.Save(file);
+                XmlTextWriter xmlTextWriter = new XmlTextWriter(file, new UTF8Encoding(false));
+                xmlTextWriter.Formatting = Formatting.Indented; 
+                xml.Save(xmlTextWriter);
+                xmlTextWriter.Close();
             }
             catch(System.Exception e)
             {

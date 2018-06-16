@@ -1210,6 +1210,10 @@ namespace UnityX3D
                 xml.AppendChild(docType);
 
                 X3DNode = CreateNode("X3D");
+                AddXmlAttribute(X3DNode, "profile", "Immersive");
+                AddXmlAttribute(X3DNode, "version", "3.3");
+                AddXmlAttribute(X3DNode, "xmlns:xsd", "http://www.w3.org/2001/XMLSchema-instance");
+                AddXmlAttribute(X3DNode, "xsd:noNamespaceSchemaLocation", "http://www.web3d.org/specifications/x3d-3.3.xsd");
                 xml.AppendChild(X3DNode);
 
                 sceneNode = CreateNode("Scene");

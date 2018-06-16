@@ -735,7 +735,8 @@ namespace UnityX3D
                     multiTextureCoordinateNode.AppendChild(textureCoordinateNode);
                 }
 
-                geometryNode.AppendChild(multiTextureCoordinateNode);
+                if (multiTextureCoordinateNode.HasChildNodes)
+                    geometryNode.AppendChild(multiTextureCoordinateNode);
             }
 
             return geometryNode;

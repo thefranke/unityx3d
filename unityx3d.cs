@@ -1098,7 +1098,7 @@ namespace UnityX3D
             else
             */
             {
-                XmlNode solidBackground = CreateNode("SolidBackground");
+                XmlNode solidBackground = CreateNode("Background");
                 AddXmlAttribute(solidBackground, "color", Tools.ToString(RenderSettings.ambientSkyColor));
                 sceneNode.AppendChild(solidBackground);
             }

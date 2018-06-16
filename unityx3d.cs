@@ -1072,7 +1072,7 @@ namespace UnityX3D
         static void ExportRenderSettings()
         {
             XmlNode navigationInfoNode = CreateNode("NavigationInfo");
-            AddXmlAttribute(navigationInfoNode, "headlight", Preferences.disableHeadlight ? "FALSE" : "TRUE");
+            AddXmlAttribute(navigationInfoNode, "headlight", Preferences.disableHeadlight ? "false" : "true");
             sceneNode.AppendChild(navigationInfoNode);
 
             /*

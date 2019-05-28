@@ -4,6 +4,8 @@
  * Copyright (c) 2017 Tobias Alexander Franke
  * http://www.tobias-franke.eu
  *
+ * Copyright (c) 2019 John Grime, ETL, University of Oklahoma
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
@@ -31,7 +33,6 @@ using System.Xml;
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
-using System.Reflection;
 
 namespace UnityX3D
 {
@@ -95,19 +96,20 @@ namespace UnityX3D
 
     class Tools
     {
-        // Clear the console
         public static void ClearConsole()
         {
             Debug.ClearDeveloperConsole();
         }
 
-        // Helper to convert a Vector2 to a string
+        //
+        // String helper routines
+        //
+
         public static string ToString(Vector2 v)
         {
             return v.x + " " + v.y;
         }
 
-        // Helper to convert a Vector3 to a string
         public static string ToString(Vector3 v)
         {
             return v.x + " " + v.y + " " + v.z;
@@ -115,7 +117,7 @@ namespace UnityX3D
 
         public static string[] TokensFromString(string v)
         {
-            if (v != "")
+            if (!string.IsNullOrEmpty(v))
             { 
                 char[] delimiters = new char[] { ',', ' ' };
                 string[] tokens = v.Split(delimiters);
@@ -163,15 +165,54 @@ namespace UnityX3D
             return new Vector4(defaultScalar, defaultScalar, defaultScalar, defaultScalar);
         }
 
-        // Helper to convert a Color to a string
+        //
+        // XML node attribute helper routines
+        //
+
+        public static string GetAttribute(XmlNode node, string attrib)
+        {
+            if (node.Attributes != null)
+            {
+                var a = node.Attributes[attrib];
+                if (a != null)
+                    return a.Value;
+            }
+
+            return "";
+        }
+
+        public static Vector3 Vector3FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
+        {
+            return Vector3FromString(GetAttribute(node, attrib), defaultScalar);
+        }
+
+        public static Vector4 Vector4FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
+        {
+            return Vector4FromString(GetAttribute(node, attrib), defaultScalar);
+        }
+
+        public static float FloatFromAttribute(XmlNode node, string attrib)
+        {
+            string v = GetAttribute(node, attrib);
+
+            if (v == "")
+                return 0;
+
+            return float.Parse(v);
+        }
+
+        //
+        // Misc. helper routines
+        //
+
         public static string ToString(Color c)
         {
             return c.r + " " + c.g + " " + c.b;
         }
 
-        public static double ToRadians(double angle)
+        public static double ToRadians(double degrees)
         {
-            return Mathf.Deg2Rad * angle;
+            return Mathf.Deg2Rad * degrees;
         }
 
         public static float ToDegrees(float radians)
@@ -185,13 +226,47 @@ namespace UnityX3D
      */
     class X3DImporter : AssetPostprocessor
     {
-        static protected Dictionary<string, GameObject> DefToObjMap = new Dictionary<string, GameObject>();
+        //
+        // Data containers, output of processing specific X3D nodes
+        //
 
-        public static string GetName(XmlNode node, GameObject obj)
+        class MaterialInfo
+        {
+            // Per-material
+            public float smoothness, metalness;
+            public Color diffuseColor, emissiveColor;
+
+            // This is actually a global render setting
+            public float ambientIntensity;
+        }
+
+        class AppearanceInfo
+        {
+            public MaterialInfo material = null;
+            public Texture2D texture = null;
+        }
+
+        class TransformInfo
+        {
+            public Vector3 translation, scale;
+            public Quaternion rotation;
+        }
+
+        //
+        // Map to help implement DEF/USE in X3D's "Shape" nodes
+        //
+
+        Dictionary<string, GameObject> DefToObjMap = new Dictionary<string, GameObject>();
+
+        //
+        // Extract node name (if present), populating DefToObj map as we go.
+        //
+
+        string GetName(XmlNode node, GameObject obj)
         {
             if (node.Attributes != null)
             {
-                var name = node.Attributes["DEF"];
+                XmlAttribute name = node.Attributes["DEF"];
                 if (name != null)
                 {
                     DefToObjMap[name.Value] = obj;
@@ -199,245 +274,387 @@ namespace UnityX3D
                 }
             }
 
-            if (node.Name != null)
-                return node.Name;
-            else
-                return "Unnamed";
+            return node.Name ?? "Unnamed";
         }
 
-        static string GetAttribute(XmlNode node, string attrib)
+        //
+        // Mesh generation 
+        //
+
+        GameObject ReadBox(XmlNode boxNode, GameObject parent)
         {
-            if (node.Attributes != null)
-            {
-                var a = node.Attributes[attrib];
-                if (a != null)
-                    return a.Value;
-            }
+            Vector3 size = Tools.Vector3FromAttribute(boxNode, "size", 1);
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-            return "";
-        }
+            GameObject obj = new GameObject("Box");
 
-        static Vector3 Vector3FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
-        {
-            return Tools.Vector3FromString(GetAttribute(node, attrib), defaultScalar);
-        }
-
-        static Vector4 Vector4FromAttribute(XmlNode node, string attrib, float defaultScalar = 0)
-        {
-            return Tools.Vector4FromString(GetAttribute(node, attrib), defaultScalar);
-        }
-
-        static float FloatFromAttribute(XmlNode node, string attrib)
-        {
-            string v = GetAttribute(node, attrib);
-
-            if (v == "")
-                return 0;
-
-            return float.Parse(v);
-        }
-
-        static void ReadBox(XmlNode boxNode, GameObject obj)
-        {
-            Vector3 size = Vector3FromAttribute(boxNode, "size", 1);
+            obj.transform.SetParent(parent.transform);
             obj.transform.localScale = size;
 
-            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
             meshFilter.mesh = cube.GetComponent<MeshFilter>().sharedMesh;
+
             GameObject.DestroyImmediate(cube);
+
+            return obj;
         }
 
-        static void ReadIndexedFaceSet(XmlNode indexedFaceSetNode, GameObject obj)
+        List<GameObject> ReadIndexedFaceSet(XmlNode indexedFaceSetNode, GameObject parent)
         {
-            int[] coordIndex = Tools.IntArrayFromString(GetAttribute(indexedFaceSetNode, "coordIndex"));
-            if (coordIndex.Length == 0)
-                return;
+            List<GameObject> components = new List<GameObject>();
+            float[] _vtx = null, _uv = null, _nrm = null, _rgba = null;
 
-            XmlNode coordinateNode = null;
-            XmlNode normalNode = null;
+            //
+            // Both of the following contain per-triangle indices into flat coord / tex coord arrays;
+            // each set of triangle info is stored as a 4-tuple, with the 4th element ignored (it's a
+            // sentinel with value -1 denoting the end of polygonal faces; we obviously assume triangles).
+            //
+            int[] _tri_vtx_idx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "coordIndex"));
+            int[] _tri_uv_idx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "texCoordIndex"));
 
-            foreach(XmlNode child in indexedFaceSetNode)
+            // If we have no triangle vertices, we can't really do anything; return empty list.
+            if (_tri_vtx_idx.Length == 0) return components;
+
+            // Extract raw data arrays
+            foreach (XmlNode child in indexedFaceSetNode)
             {
                 if (child.Name == "Coordinate")
-                    coordinateNode = child;
+                    _vtx = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
+
+                if (child.Name == "TextureCoordinate")
+                    _uv = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
 
                 if (child.Name == "Normal")
-                    normalNode = child;
+                    _nrm = Tools.FloatArrayFromString(Tools.GetAttribute(child, "vector"));
+
+                if (child.Name == "ColorRGBA")
+                    _rgba = Tools.FloatArrayFromString(Tools.GetAttribute(child, "color"));
             }
 
-            if (coordinateNode == null)
-                return;
-            
-            MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
-            Mesh mesh = new Mesh();
+            // This should probably be treated as an error: We expect at least one vertex!
+            if (_vtx == null) return components;
 
-            // Setup vertices
+            //
+            // Each triangle has per-vertex indices into the arrays containing the coordinate,
+            // uv, normal, and rgba data. Walk the triangles, creating UNIQUE vertex data for
+            // each triangle; Unity meshes assume separate per-vertex data for eg texture
+            // coords etc (this is not guaranteed in X3D files).
+            // 
+            // Unity also typically limits vertex count in a mesh due to using 16 bit indices
+            // (x < 2^16, so x < 65,536); if this limit is reached, add remaining data to a new,
+            // different mesh. Unity GameObjects can only have one mesh, so meshes are assigned
+            // to child objects (with new child objects created as and when needed).
+            //
+
+            // 65535 % 3 == 0, so (x >= max_mesh_vtx) OK for adding sets of 3 vertices
+            const int max_mesh_vtx = 65535;
+
+            // Current mesh to which we're adding vertex and triangle information
+            Mesh mesh = null;
+
+            // Current mesh data is accumulated into these Lists
+            List<int> tri = new List<int>();
+            List<Vector3> vtx = new List<Vector3>();
+            List<Vector3> nrm = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<Color> rgba = new List<Color>();
+
+            // Raw index arrays are sequential integer 4-tuples, so n_tri = length/4
+            int n_tri = _tri_vtx_idx.Length / 4;
+
+            // Set up new triangle data, creating unique vertex data as we go
+            for (int tri_i = 0; tri_i < n_tri; tri_i++)
             {
-                float[] points = Tools.FloatArrayFromString(GetAttribute(coordinateNode, "point"));
-                List<Vector3> vertices = new List<Vector3>();
+                int tri_offset = tri_i * 4; // as indices are per-triangle 4-tuples (4th element ignored) 
 
-                for (int i = 0; i < points.Length; i += 3)
+                // Create new mesh object if needed; we'll only see this in the first loop iteration,
+                // or immediately after adding a full mesh and clearing the previous accumulators.
+                if (vtx.Count() < 1)
                 {
-                    vertices.Add(new Vector3(points[i + 0], points[i + 1], points[i + 2]));
+                    GameObject obj = new GameObject("Mesh");
+                    obj.transform.SetParent(parent.transform);
+
+                    mesh = new Mesh();
+
+                    MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
+                    meshFilter.mesh = mesh;
+
+                    components.Add(obj); // <- ensure new object reference is returned to the caller
                 }
 
-                mesh.SetVertices(vertices);
+                // Generate new per-vertex data for each of the 3 vertices in the triangle
+                for (int vtx_offset=0; vtx_offset < 3; vtx_offset++)
+                {
+                    int i = _tri_vtx_idx[tri_offset + vtx_offset];
+
+                    // Create new per-vertex coordinate
+                    {
+                        int j = (i * 3);
+                        vtx.Add(new Vector3(_vtx[j + 0], _vtx[j + 1], _vtx[j + 2]));
+                    }
+
+                    // Create new per-vertex normal
+                    if (_nrm != null)
+                    {
+                        int j = (i * 3);
+                        nrm.Add(new Vector3(_nrm[j + 0], _nrm[j + 1], _nrm[j + 2]));
+                    }
+
+                    // Create new per-vertex rgba color value
+                    if (_rgba != null)
+                    {
+                        int j = (i * 4);
+                        rgba.Add(new Vector4(_rgba[j + 0], _rgba[j + 1], _rgba[j + 2], _rgba[j + 3]));
+                    }
+
+                    // Create new per-vertex texture coordinate
+                    if (_uv != null)
+                    {
+                        i = _tri_uv_idx[tri_offset + vtx_offset];
+                        int j = (i * 2);
+                        uv.Add(new Vector2(_uv[j + 0], _uv[j + 1]));
+                    }
+                }
+
+                // Set new triangle vertex indices; simply sequential.
+                tri.Add(tri.Count());
+                tri.Add(tri.Count());
+                tri.Add(tri.Count());
+
+                // Have we reached the limit of what a single mesh can contain?
+                if (vtx.Count() >= max_mesh_vtx)
+                {
+                    // Set mesh data
+                    mesh.SetVertices(vtx);
+
+                    if (_nrm  != null) mesh.SetNormals(nrm);
+                    if (_rgba != null) mesh.SetColors(rgba);
+                    if (_uv   != null) mesh.SetUVs(0, uv);
+
+                    mesh.SetTriangles(tri, 0);
+
+                    // Clear accumulators; triggers new mesh creation if loop continues.
+                    tri.Clear();
+                    vtx.Clear();
+                    nrm.Clear();
+                    uv.Clear();
+                    rgba.Clear();
+                }
             }
 
-            // Setup normals
-            if (normalNode != null)
+            // Populate the final mesh, if needed
+            if (vtx.Count() > 0)
             {
-                float[] vectors = Tools.FloatArrayFromString(GetAttribute(normalNode, "vector"));
-                List<Vector3> normals = new List<Vector3>();
+                mesh.SetVertices(vtx);
 
-                for (int i = 0; i < vectors.Length; i += 3)
-                {
-                    normals.Add(new Vector3(vectors[i + 0], vectors[i + 1], vectors[i + 2]));
-                }
+                if (_nrm  != null) mesh.SetNormals(nrm);
+                if (_rgba != null) mesh.SetColors(rgba);
+                if (_uv   != null) mesh.SetUVs(0, uv);
 
-                mesh.SetNormals(normals);
+                mesh.SetTriangles(tri, 0);
             }
 
-            // Setup indices
-            { 
-                int size = coordIndex.Length / 4 * 3;
+            return components;
+        }
 
-                // Filter out every fourth entry
-                int[] triangles = new int[size];
-                int j = 0;
-                for (int i = 0; i < coordIndex.Length; i += 4, j += 3)
-                {
-                    triangles[j + 0] = coordIndex[i + 0];
-                    triangles[j + 1] = coordIndex[i + 1];
-                    triangles[j + 2] = coordIndex[i + 2];
-                }
+        //
+        // Material / texture generation
+        //
 
-                mesh.SetTriangles(triangles, 0);
+        MaterialInfo ReadMaterial(XmlNode node, bool isCommonSurfaceShader = false)
+        {
+            float shininess;
+            Vector3 specular, diffuse, emissive;
+            float ambientIntensity;
+
+            if (isCommonSurfaceShader)
+            {
+                shininess = Tools.FloatFromAttribute(node, "shininessFactor");
+
+                specular = Tools.Vector3FromAttribute(node, "specularFactor");
+                diffuse = Tools.Vector3FromAttribute(node, "diffuseFactor");
+                emissive = Tools.Vector3FromAttribute(node, "emissionColor");
+
+                Vector3 ambientFactor = Tools.Vector3FromAttribute(node, "ambientFactor");
+                ambientIntensity = ambientFactor.magnitude;
+            }
+            else
+            {
+                shininess = Tools.FloatFromAttribute(node, "shininess");
+
+                specular = Tools.Vector3FromAttribute(node, "specularColor");
+                diffuse = Tools.Vector3FromAttribute(node, "diffuseColor");
+                emissive = Tools.Vector3FromAttribute(node, "emissiveColor");
+
+                ambientIntensity = Tools.FloatFromAttribute(node, "ambientIntensity");
             }
 
-            // Insert mesh
-            meshFilter.mesh = mesh;
+            return new MaterialInfo {
+                smoothness = Mathf.Sqrt(shininess),
+                metalness = specular.magnitude,
+                diffuseColor = new Color(diffuse[0], diffuse[1], diffuse[2]),
+                emissiveColor = new Color(emissive[0], emissive[1], emissive[2]),
+                ambientIntensity = ambientIntensity
+            };
+
+            // TODO: textures
         }
 
-        static void ReadCommonSurfaceShader(XmlNode cssNode, GameObject obj)
+        Texture2D ReadImageTexture(XmlNode imageTextureNode, string filepathPrefix)
         {
-            Renderer renderer = obj.GetComponent<MeshRenderer>();
+            string url = Tools.GetAttribute(imageTextureNode, "url");
+            string localPath;
 
-            Vector3 specular = Vector3FromAttribute(cssNode, "specularFactor");
-            float metalness = specular.magnitude;
-            renderer.sharedMaterial.SetFloat("_Metallic", metalness);
+            // 
+            // Use ImageTexture URL to create object texture. Here, I assume:
+            // 
+            // 1. URL refers to a local file (remote data fetch via http/ftp/etc currently unsupported)
+            //
+            // 2. There is only one texture path defined; in principle, the "url" attribute is an
+            //    "MFString" - which can be a comma-delineated array of (quoted) strings:
+            // 
+            // https://doc.x3dom.org/author/Texturing/ImageTexture.html
+            // http://www.web3d.org/specifications/X3dSchemaDocumentation3.3/x3d-3.3_MFString.html
+            // 
 
-            float shininess = FloatFromAttribute(cssNode, "shininessFactor");
-            float smoothness = Mathf.Sqrt(shininess);
-            renderer.sharedMaterial.SetFloat("_Glossiness", smoothness);
+            try
+            {
+                System.Uri uri = new System.Uri(Tools.GetAttribute(imageTextureNode, "url"));
+                if (!uri.IsFile)
+                {
+                    Debug.LogWarning($"ImageTexture URI scheme '{uri.Scheme}' is not currently supported.");
+                    return null;
+                }
+                localPath = uri.LocalPath;
+            }
+            catch (System.Exception)
+            {
+                Debug.LogWarning($"ImageTexture parse failure for '{url}' as URI; assuming local file path.");
+                if (string.IsNullOrEmpty(url))
+                {
+                    Debug.LogWarning($"ImageTexture url is null or empty; texture will not be applied.");
+                    return null;
+                }
+                localPath = url;
+            }
 
-            Vector3 diffuse = Vector3FromAttribute(cssNode, "diffuseFactor");
-            Color diffuseColor = new Color(diffuse[0], diffuse[1], diffuse[2]);
-            renderer.sharedMaterial.SetColor("_Color", diffuseColor * 1.0f / (1 - metalness));
+            string path = System.IO.Path.Combine(filepathPrefix, localPath);
 
-            Vector3 emissive = Vector3FromAttribute(cssNode, "emissionColor");
-            Color emissiveColor = new Color(emissive[0], emissive[1], emissive[2]);
-            renderer.sharedMaterial.SetColor("_EmissionColor", emissiveColor);
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning($"ImageTexture file path '{path}' not found; texture will not be applied.");
+                return null;
+            }
 
-            Vector3 ambientFactor = Vector3FromAttribute(cssNode, "ambientFactor");
-            RenderSettings.ambientIntensity = ambientFactor.magnitude;
-            
-            // TODO: Textures
+            // Read specified image data from file into a Unity texture
+            byte[] imageBytes = File.ReadAllBytes(path);
+            Texture2D texture = new Texture2D(2, 2);
+            texture.LoadImage(imageBytes);
+
+            return texture;
         }
 
-        static void ReadMaterial(XmlNode materialNode, GameObject obj)
+        AppearanceInfo ReadAppearance(XmlNode appearanceNode, string filepathPrefix)
         {
-            Renderer renderer = obj.GetComponent<MeshRenderer>();
+            AppearanceInfo appearance = new AppearanceInfo();
 
-            Vector3 specular = Vector3FromAttribute(materialNode, "specularColor");
-            float metalness = specular.magnitude;
-            renderer.sharedMaterial.SetFloat("_Metallic", metalness);
-
-            float shininess = FloatFromAttribute(materialNode, "shininess");
-            float smoothness = Mathf.Sqrt(shininess);
-            renderer.sharedMaterial.SetFloat("_Glossiness", smoothness);
-
-            Vector3 diffuse = Vector3FromAttribute(materialNode, "diffuseColor");
-            Color diffuseColor = new Color (diffuse[0], diffuse[1], diffuse[2]);
-            renderer.sharedMaterial.SetColor("_Color", diffuseColor * 1.0f / (1 - metalness));
-            
-            Vector3 emissive = Vector3FromAttribute(materialNode, "emissiveColor");
-            Color emissiveColor = new Color(emissive[0], emissive[1], emissive[2]);
-            renderer.sharedMaterial.SetColor("_EmissionColor", emissiveColor);
-
-            float ambientIntensity = FloatFromAttribute(materialNode, "ambientIntensity");
-            RenderSettings.ambientIntensity = ambientIntensity;
-
-            // TODO: Textures
-        }
-
-        static void ReadAppearance(XmlNode appearanceNode, GameObject obj)
-        {
-            // Add dummy material just in case Shape didn't come with a material
-            Renderer renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = new Material(Shader.Find("Standard"));
-
-            // Detect some kind of material
+            // Detect some kind of material & texture (if present)
             foreach (XmlNode child in appearanceNode.ChildNodes)
             {
-                if (child.Name == "Material")
+                bool isCSS = (child.Name == "CommonSurfaceShader");
+
+                if (isCSS || child.Name == "Material")
                 {
-                    ReadMaterial(child, obj);
-                    break;
+                    appearance.material = ReadMaterial(child, isCommonSurfaceShader: isCSS);
                 }
-                else if (child.Name == "CommonSurfaceShader")
+                else if (child.Name == "ImageTexture")
                 {
-                    ReadCommonSurfaceShader(child, obj);
-                    break;
+                    appearance.texture = ReadImageTexture(child, filepathPrefix);
                 }
             }
+
+            return appearance;
         }
 
-        static void ReadShape(XmlNode shapeNode, GameObject obj)
+        //
+        // Shapes are a combination of mesh data and the material properties applied to the mesh
+        //
+
+        void ReadShape(XmlNode shapeNode, GameObject parent, string filepathPrefix)
         {
-            // Detect some kind of mesh (only one)
+            List<GameObject> components = new List<GameObject>();
+            AppearanceInfo appearance = null;
+
+            // Extract mesh components and appearance data
             foreach (XmlNode child in shapeNode.ChildNodes)
             {
                 if (child.Name == "Box")
                 {
-                    ReadBox(child, obj);
-                    break;
+                    GameObject box = ReadBox(child, parent);
+                    components.Add(box);
                 }
                 else if (child.Name == "IndexedFaceSet")
                 {
-                    ReadIndexedFaceSet(child, obj);
-                    break;
+                    components.AddRange(ReadIndexedFaceSet(child, parent));
                 }
-            }
-
-            // Detect other relevant attributes
-            foreach (XmlNode child in shapeNode.ChildNodes)
-            {
-                if (child.Name == "Appearance")
+                else if (child.Name == "Appearance")
                 {
-                    ReadAppearance(child, obj);
+                    appearance = ReadAppearance(child, filepathPrefix);
                 }
+            }
+
+            // Apply appearance data to all mesh components of the shape.
+            foreach (GameObject obj in components)
+            {
+                Renderer renderer = obj.GetComponent<MeshRenderer>();
+
+                if (renderer == null)
+                    renderer = obj.AddComponent<MeshRenderer>();
+
+                // Add a default material, will be modified below if needed.
+                renderer.material = new Material(Shader.Find("Standard"));
+
+                if (appearance == null) continue;
+
+                // Apply material properties
+                if (appearance.material != null)
+                {
+                    MaterialInfo m = appearance.material;
+                    renderer.sharedMaterial.SetFloat("_Metallic", m.metalness);
+                    renderer.sharedMaterial.SetFloat("_Glossiness", m.smoothness);
+                    renderer.sharedMaterial.SetColor("_Color", m.diffuseColor * 1.0f / (1 - m.metalness));
+                    renderer.sharedMaterial.SetColor("_EmissionColor", m.emissiveColor);
+                    RenderSettings.ambientIntensity = m.ambientIntensity;
+                }
+
+                // Apply texture
+                if (appearance.texture != null)
+                    renderer.material.mainTexture = appearance.texture;
             }
         }
 
-        static void ReadTransform(XmlNode transformNode, GameObject obj)
+        TransformInfo ReadTransform(XmlNode transformNode)
         {
-            Vector3 translate = Vector3FromAttribute(transformNode, "translation");
-            obj.transform.localPosition = translate;
+            TransformInfo ti = new TransformInfo();
 
-            Vector4 rotation = Vector4FromAttribute(transformNode, "rotation");
-            Vector3 axis = new Vector3(rotation[0], rotation[1], rotation[2]);
-            float angle = Tools.ToDegrees(rotation[3]);
-            obj.transform.rotation = Quaternion.AngleAxis(angle, axis);
+            // Translation
+            ti.translation = Tools.Vector3FromAttribute(transformNode, "translation");
 
-            Vector3 scale = Vector3FromAttribute(transformNode, "scale", 1);
-            obj.transform.localScale = scale;
-            
-            ReadX3D(transformNode, obj);
+            // Convert axis/angle rotation into quaternion
+            {
+                Vector4 values = Tools.Vector4FromAttribute(transformNode, "rotation");
+                Vector3 axis = new Vector3(values[0], values[1], values[2]);
+                float angle = Tools.ToDegrees(values[3]);
+                ti.rotation = Quaternion.AngleAxis(angle, axis);
+            }
+
+            // scaling
+            ti.scale = Tools.Vector3FromAttribute(transformNode, "scale", 1);
+
+            return ti;
         }
 
-        static void ReadX3D(XmlNode node, GameObject parent)
+        void ReadX3D(XmlNode node, GameObject parent, string filepathPrefix)
         {
             foreach (XmlNode childNode in node)
             {
@@ -446,57 +663,86 @@ namespace UnityX3D
                     continue;
 
                 // Re-use object? TODO: Wait until whole document is actually parsed
-                string use = GetAttribute(childNode, "USE");
+                string use = Tools.GetAttribute(childNode, "USE");
                 if (use != "" && DefToObjMap.Keys.Contains(use))
                 {
                     Object.Instantiate(DefToObjMap[use], parent.transform, false);
                     continue;
                 }
 
-                GameObject obj = new GameObject();
-                obj.name = GetName(childNode, obj);
+                GameObject new_obj = new GameObject();
+                new_obj.name = GetName(childNode, new_obj);
 
-                // Setup parent node
+                // Set parent of new object, if specified
                 if (parent != null)
-                    obj.transform.parent = parent.transform;
+                    new_obj.transform.parent = parent.transform;
 
+                // What does the current node suggest we do?
                 if (childNode.Name == "Transform")
-                    ReadTransform(childNode, obj);
+                {
+                    TransformInfo ti = ReadTransform(childNode);
 
-                if (childNode.Name == "Shape")
-                    ReadShape(childNode, obj);
+                    new_obj.transform.localPosition = ti.translation;
+                    new_obj.transform.rotation = ti.rotation;
+                    new_obj.transform.localScale = ti.scale;
+
+                    ReadX3D(childNode, new_obj, filepathPrefix); // Recurse into any child nodes under this transform
+                }
+                else if (childNode.Name == "Shape")
+                {
+                    ReadShape(childNode, new_obj, filepathPrefix);
+                }
             }
         }
 
-        static void ReadX3D(string path)
+        //
+        // Public entry point into X3D parsing; returns root GameObject for scene, populates XmlDocument.
+        //
+
+        public GameObject ReadX3D(string path, out XmlDocument xml, string filepathPrefix = null)
         {
+            xml = null;
+
             Tools.ClearConsole();
 
-            try
+            // We can't do much with a bad path.
+            if (string.IsNullOrEmpty(path))
             {
-                XmlDocument xml = new XmlDocument();
-                xml.Load(path);
-
-                // Get to Scene node
-                XmlNode x3dNode = xml.SelectSingleNode("X3D");
-                XmlNode sceneNode = x3dNode.SelectSingleNode("Scene");
-
-                GameObject scene = new GameObject("Scene");
-                ReadX3D(sceneNode, scene);
+                Debug.LogWarning( $"ReadX3D(): path is null or empty." );
+                return null;
             }
-            catch (System.Exception e)
+
+            // No user-defined filepath prefix? Attempt to infer from path.
+            if (filepathPrefix == null)
             {
-                Debug.LogError(e.ToString());
+                var fileInfo = new System.IO.FileInfo(path);
+                filepathPrefix = fileInfo.Directory.FullName;
             }
+
+            xml = new XmlDocument();
+            xml.Load(path);
+
+            // Get to Scene node
+            XmlNode x3dNode = xml.SelectSingleNode("X3D");
+            XmlNode sceneNode = x3dNode.SelectSingleNode("Scene");
+
+            // Process scene node
+            GameObject scene = new GameObject("Scene");
+            ReadX3D(sceneNode, scene, filepathPrefix);
 
             EditorUtility.ClearProgressBar();
+
+            return scene;
         }
 
         static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
             foreach (string path in importedAssets.Where(x => x.EndsWith(".x3d")))
             {
-                ReadX3D(path);
+                XmlDocument xml;
+                X3DImporter imp = new X3DImporter();
+
+                imp.ReadX3D(path, out xml);
             }
         }
     }

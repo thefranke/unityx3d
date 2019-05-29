@@ -302,37 +302,37 @@ namespace UnityX3D
         List<GameObject> ReadIndexedFaceSet(XmlNode indexedFaceSetNode, GameObject parent)
         {
             List<GameObject> components = new List<GameObject>();
-            float[] _vtx = null, _uv = null, _nrm = null, _rgba = null;
+            float[] vtx = null, uv = null, nrm = null, rgba = null;
 
             //
             // Both of the following contain per-triangle indices into flat coord / tex coord arrays;
             // each set of triangle info is stored as a 4-tuple, with the 4th element ignored (it's a
             // sentinel with value -1 denoting the end of polygonal faces; we obviously assume triangles).
             //
-            int[] _tri_vtx_idx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "coordIndex"));
-            int[] _tri_uv_idx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "texCoordIndex"));
+            int[] triVtxIdx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "coordIndex"));
+            int[] triUvIdx = Tools.IntArrayFromString(Tools.GetAttribute(indexedFaceSetNode, "texCoordIndex"));
 
             // If we have no triangle vertices, we can't really do anything; return empty list.
-            if (_tri_vtx_idx.Length == 0) return components;
+            if (triVtxIdx.Length == 0) return components;
 
             // Extract raw data arrays
             foreach (XmlNode child in indexedFaceSetNode)
             {
                 if (child.Name == "Coordinate")
-                    _vtx = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
+                    vtx = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
 
                 if (child.Name == "TextureCoordinate")
-                    _uv = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
+                    uv = Tools.FloatArrayFromString(Tools.GetAttribute(child, "point"));
 
                 if (child.Name == "Normal")
-                    _nrm = Tools.FloatArrayFromString(Tools.GetAttribute(child, "vector"));
+                    nrm = Tools.FloatArrayFromString(Tools.GetAttribute(child, "vector"));
 
                 if (child.Name == "ColorRGBA")
-                    _rgba = Tools.FloatArrayFromString(Tools.GetAttribute(child, "color"));
+                    rgba = Tools.FloatArrayFromString(Tools.GetAttribute(child, "color"));
             }
 
             // This should probably be treated as an error: We expect at least one vertex!
-            if (_vtx == null) return components;
+            if (vtx == null) return components;
 
             //
             // Each triangle has per-vertex indices into the arrays containing the coordinate,
@@ -347,29 +347,29 @@ namespace UnityX3D
             //
 
             // 65535 % 3 == 0, so (x >= max_mesh_vtx) OK for adding sets of 3 vertices
-            const int max_mesh_vtx = 65535;
+            const int maxMeshVtx = 65535;
 
             // Current mesh to which we're adding vertex and triangle information
             Mesh mesh = null;
 
             // Current mesh data is accumulated into these Lists
-            List<int> tri = new List<int>();
-            List<Vector3> vtx = new List<Vector3>();
-            List<Vector3> nrm = new List<Vector3>();
-            List<Vector2> uv = new List<Vector2>();
-            List<Color> rgba = new List<Color>();
+            List<int> triList = new List<int>();
+            List<Vector3> vtxList = new List<Vector3>();
+            List<Vector3> nrmList = new List<Vector3>();
+            List<Vector2> uvList = new List<Vector2>();
+            List<Color> rgbaList = new List<Color>();
 
             // Raw index arrays are sequential integer 4-tuples, so n_tri = length/4
-            int n_tri = _tri_vtx_idx.Length / 4;
+            int nTri = triVtxIdx.Length / 4;
 
             // Set up new triangle data, creating unique vertex data as we go
-            for (int tri_i = 0; tri_i < n_tri; tri_i++)
+            for (int triIdx = 0; triIdx < nTri; triIdx++)
             {
-                int tri_offset = tri_i * 4; // as indices are per-triangle 4-tuples (4th element ignored) 
+                int triOffset = triIdx * 4; // as indices are per-triangle 4-tuples (4th element ignored) 
 
                 // Create new mesh object if needed; we'll only see this in the first loop iteration,
                 // or immediately after adding a full mesh and clearing the previous accumulators.
-                if (vtx.Count() < 1)
+                if (vtxList.Count() < 1)
                 {
                     GameObject obj = new GameObject("Mesh");
                     obj.transform.SetParent(parent.transform);
@@ -383,75 +383,75 @@ namespace UnityX3D
                 }
 
                 // Generate new per-vertex data for each of the 3 vertices in the triangle
-                for (int vtx_offset=0; vtx_offset < 3; vtx_offset++)
+                for (int vtxOffset=0; vtxOffset < 3; vtxOffset++)
                 {
-                    int i = _tri_vtx_idx[tri_offset + vtx_offset];
+                    int i = triVtxIdx[triOffset + vtxOffset];
 
                     // Create new per-vertex coordinate
                     {
                         int j = (i * 3);
-                        vtx.Add(new Vector3(_vtx[j + 0], _vtx[j + 1], _vtx[j + 2]));
+                        vtxList.Add(new Vector3(vtx[j + 0], vtx[j + 1], vtx[j + 2]));
                     }
 
                     // Create new per-vertex normal
-                    if (_nrm != null)
+                    if (nrm != null)
                     {
                         int j = (i * 3);
-                        nrm.Add(new Vector3(_nrm[j + 0], _nrm[j + 1], _nrm[j + 2]));
+                        nrmList.Add(new Vector3(nrm[j + 0], nrm[j + 1], nrm[j + 2]));
                     }
 
                     // Create new per-vertex rgba color value
-                    if (_rgba != null)
+                    if (rgba != null)
                     {
                         int j = (i * 4);
-                        rgba.Add(new Vector4(_rgba[j + 0], _rgba[j + 1], _rgba[j + 2], _rgba[j + 3]));
+                        rgbaList.Add(new Vector4(rgba[j + 0], rgba[j + 1], rgba[j + 2], rgba[j + 3]));
                     }
 
                     // Create new per-vertex texture coordinate
-                    if (_uv != null)
+                    if (uv != null)
                     {
-                        i = _tri_uv_idx[tri_offset + vtx_offset];
+                        i = triUvIdx[triOffset + vtxOffset];
                         int j = (i * 2);
-                        uv.Add(new Vector2(_uv[j + 0], _uv[j + 1]));
+                        uvList.Add(new Vector2(uv[j + 0], uv[j + 1]));
                     }
                 }
 
                 // Set new triangle vertex indices; simply sequential.
-                tri.Add(tri.Count());
-                tri.Add(tri.Count());
-                tri.Add(tri.Count());
+                triList.Add(triList.Count());
+                triList.Add(triList.Count());
+                triList.Add(triList.Count());
 
                 // Have we reached the limit of what a single mesh can contain?
-                if (vtx.Count() >= max_mesh_vtx)
+                if (vtxList.Count() >= maxMeshVtx)
                 {
                     // Set mesh data
-                    mesh.SetVertices(vtx);
+                    mesh.SetVertices(vtxList);
 
-                    if (_nrm  != null) mesh.SetNormals(nrm);
-                    if (_rgba != null) mesh.SetColors(rgba);
-                    if (_uv   != null) mesh.SetUVs(0, uv);
+                    if (nrm  != null) mesh.SetNormals(nrmList);
+                    if (rgba != null) mesh.SetColors(rgbaList);
+                    if (uv   != null) mesh.SetUVs(0, uvList);
 
-                    mesh.SetTriangles(tri, 0);
+                    mesh.SetTriangles(triList, 0);
 
                     // Clear accumulators; triggers new mesh creation if loop continues.
-                    tri.Clear();
-                    vtx.Clear();
-                    nrm.Clear();
-                    uv.Clear();
-                    rgba.Clear();
+                    triList.Clear();
+                    vtxList.Clear();
+                    nrmList.Clear();
+                    uvList.Clear();
+                    rgbaList.Clear();
                 }
             }
 
             // Populate the final mesh, if needed
-            if (vtx.Count() > 0)
+            if (vtxList.Count() > 0)
             {
-                mesh.SetVertices(vtx);
+                mesh.SetVertices(vtxList);
 
-                if (_nrm  != null) mesh.SetNormals(nrm);
-                if (_rgba != null) mesh.SetColors(rgba);
-                if (_uv   != null) mesh.SetUVs(0, uv);
+                if (nrm  != null) mesh.SetNormals(nrmList);
+                if (rgba != null) mesh.SetColors(rgbaList);
+                if (uv   != null) mesh.SetUVs(0, uvList);
 
-                mesh.SetTriangles(tri, 0);
+                mesh.SetTriangles(triList, 0);
             }
 
             return components;
@@ -670,27 +670,27 @@ namespace UnityX3D
                     continue;
                 }
 
-                GameObject new_obj = new GameObject();
-                new_obj.name = GetName(childNode, new_obj);
+                GameObject newObj = new GameObject();
+                newObj.name = GetName(childNode, newObj);
 
                 // Set parent of new object, if specified
                 if (parent != null)
-                    new_obj.transform.parent = parent.transform;
+                    newObj.transform.parent = parent.transform;
 
                 // What does the current node suggest we do?
                 if (childNode.Name == "Transform")
                 {
                     TransformInfo ti = ReadTransform(childNode);
 
-                    new_obj.transform.localPosition = ti.translation;
-                    new_obj.transform.rotation = ti.rotation;
-                    new_obj.transform.localScale = ti.scale;
+                    newObj.transform.localPosition = ti.translation;
+                    newObj.transform.rotation = ti.rotation;
+                    newObj.transform.localScale = ti.scale;
 
-                    ReadX3D(childNode, new_obj, filepathPrefix); // Recurse into any child nodes under this transform
+                    ReadX3D(childNode, newObj, filepathPrefix); // Recurse into any child nodes under this transform
                 }
                 else if (childNode.Name == "Shape")
                 {
-                    ReadShape(childNode, new_obj, filepathPrefix);
+                    ReadShape(childNode, newObj, filepathPrefix);
                 }
             }
         }

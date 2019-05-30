@@ -96,7 +96,8 @@ namespace UnityX3D
             EditorPrefs.SetBool("UnityX3D.lightmapUnlitFaceSets", lightmapUnlitFaceSets);
         }
 #else
-        static void Load()
+	// Just a dummy routine.
+	static void Load()
         {
             loaded = true;
         }

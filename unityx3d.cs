@@ -36,7 +36,9 @@ using System.Collections.Generic;
 
 namespace UnityX3D
 {
+#if UNITY_EDITOR
     [InitializeOnLoad]
+#endif
     public class Preferences
     {
         protected static bool loaded = false;
@@ -54,6 +56,7 @@ namespace UnityX3D
             Load();
         }
 
+#if UNITY_EDITOR
         [PreferenceItem("UnityX3D")]
         static void PreferenceGUI()
         {
@@ -92,6 +95,12 @@ namespace UnityX3D
             EditorPrefs.SetBool("UnityX3D.savePNGlightmaps", savePNGlightmaps);
             EditorPrefs.SetBool("UnityX3D.lightmapUnlitFaceSets", lightmapUnlitFaceSets);
         }
+#else
+        static void Load()
+        {
+            loaded = true;
+        }
+#endif
     }
 
     class Tools
@@ -224,7 +233,11 @@ namespace UnityX3D
     /*
      * This is the main class responsible for importing an X3D document
      */
+#if UNITY_EDITOR
     class X3DImporter : AssetPostprocessor
+#else
+    class X3DImporter
+#endif
     {
         //
         // Data containers, output of processing specific X3D nodes
@@ -730,8 +743,9 @@ namespace UnityX3D
             GameObject scene = new GameObject("Scene");
             ReadX3D(sceneNode, scene, filepathPrefix);
 
+#if UNITY_EDITOR
             EditorUtility.ClearProgressBar();
-
+#endif
             return scene;
         }
 
@@ -992,16 +1006,23 @@ namespace UnityX3D
         // Find a texture asset and copy it to the output path of the X3D file
         static string WriteTextureFile(Texture texture)
         {
+#if UNITY_EDITOR
             string path = AssetDatabase.GetAssetPath(texture);
             string file = Path.GetFileName(path);
-            
+#else
+            string path = "";
+            string file = "";
+#endif
+
             if (file != "")
+            {
                 // TODO maybe prompt for each overwrite?
                 File.Copy(path, outputPath + "/" + file, true);
+            }
             else
             {
                 Texture2D tex2d = texture as Texture2D;
-                
+
                 if (tex2d)
                 {
                     file = System.Guid.NewGuid().ToString();
@@ -1353,7 +1374,9 @@ namespace UnityX3D
 
         static XmlNode TransformToX3D(Transform transform)
         {
+#if UNITY_EDITOR
             EditorUtility.DisplayProgressBar("UnityX3D", "Exporting scene...", (float)currentNodeIndex/numNodesToExport);
+#endif
             currentNodeIndex++;
             
             XmlNode transformNode;
@@ -1426,6 +1449,7 @@ namespace UnityX3D
             return count + tr.childCount;
         }
 
+#if UNITY_EDITOR
         [MenuItem("Assets/X3D/Export X3D...")]
         static void ExportX3D()
         {
@@ -1496,5 +1520,11 @@ namespace UnityX3D
 
             EditorUtility.ClearProgressBar();
         }
+#else
+        static void ExportX3D()
+        {
+            Debug.LogWarning( "X3DExporter::ExportX3D() : Method is available only in the Unity editor, not in stand-along builds!" );
+        }
+#endif
     }
 }
